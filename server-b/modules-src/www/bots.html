@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>角色管理</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d232b; --muted: #66707c; --line: #dfe3e8;
+    --accent: #2f6fd6; --ok: #2e8b57; --warn: #c27c0e; --bad: #c0392b; --hp: #d9534f; --mp: #3b7dd8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171b; --panel: #1d2127; --text: #e4e8ec; --muted: #9aa4af; --line: #2e343c;
+      --accent: #6aa3ff; --ok: #4cc28a; --warn: #e3a541; --bad: #ef6b5f; --hp: #e5645f; --mp: #5c9cf0;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif; }
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+  label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 2px; }
+  input, select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; min-width: 0; }
+  input { width: 130px; }
+  button { font: inherit; font-size: 13px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger:hover { border-color: var(--bad); color: var(--bad); }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .state { font-weight: 600; white-space: nowrap; }
+  .state.online { color: var(--ok); } .state.failed, .state.closed { color: var(--bad); } .state.connect, .state.login, .state.list, .state.enter { color: var(--warn); }
+  .err { color: var(--bad); font-size: 12px; }
+  .bar { width: 120px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 2px; }
+  .bar > div { height: 100%; }
+  .num { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
+  .tags span { display: inline-block; font-size: 12px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--line); margin: 0 4px 2px 0; }
+  .actions { display: flex; flex-wrap: wrap; gap: 4px; max-width: 360px; }
+  #toast { position: fixed; right: 16px; bottom: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; display: none; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>角色管理</h1>
+  <p class="sub">伺服器扮演遊戲端讓這些帳號上線；角色是一般玩家身分，存檔與自動戰鬥照常。每 2 秒更新。</p>
+
+  <section>
+    <h2>新增帳號</h2>
+    <form id="add">
+      <label>帳號<input name="account" required pattern="[A-Za-z0-9_]{1,16}" autocomplete="off"></label>
+      <label>密碼<input name="password" required pattern="[A-Za-z0-9_]{1,16}" autocomplete="off"></label>
+      <label>角色位置<select name="slot"><option value="0">左（0）</option><option value="1">右（1）</option></select></label>
+      <label>角色名（英數字；該位置沒角色時自動建立，中文名請在遊戲裡建）<input name="charname" pattern="[A-Za-z0-9_]{1,16}" autocomplete="off"></label>
+      <button class="primary" type="submit">新增</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>帳號 <span class="muted" id="count"></span></h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>帳號</th><th>狀態</th><th>角色</th><th>血／魔</th><th>位置</th><th>狀況</th><th>指令</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="muted">載入中…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const STATE = { offline: '離線', connect: '連線中', login: '登入中', list: '讀取角色', enter: '進入遊戲', online: '在線', failed: '失敗', closed: '已斷線' };
+// 伺服器回英數代碼，這裡翻成中文；「代碼:參數」的參數接在後面
+const MSG = {
+  bad_param: '參數不對', offline: '角色不在線上', login: '登入中', logout: '已登出', saved: '已設定',
+  auto_on: '自動戰鬥開', auto_off: '自動戰鬥關', hospital: '回東醫補滿（隊員不能單獨回，要由隊長）',
+  encount: '原地遇敵（失敗＝這裡不會遇敵或已在戰鬥）', grind_on: '開始原地練等', grind_off: '停止練等',
+  bad_pos: '座標不能站', warped: '已傳送', bad_leader: '隊長帳號不對', leader_offline: '隊長不在線上',
+  joined: '已加入隊伍', left: '已離隊', added: '已新增', deleted: '已刪除',
+  bad_account: '帳號／密碼只能英數字底線（最多 16 字）', bad_charname: '角色名只能英數字底線（最多 16 字）',
+  no_char: '這個位置沒有角色', create_failed: '建角色失敗（名字重複？）', enter_failed: '進入遊戲失敗',
+  server_closed: '伺服器關閉連線', socket_error: '連線錯誤', timeout: '登入逾時，停在',
+};
+const text = code => { const [k, arg] = String(code ?? '').split(':'); return (MSG[k] || k) + (arg ? ' ' + arg : ''); };
+// 角色名是遊戲端（台版）送的 Big5 原始位元組，伺服器回 hex
+const big5 = new TextDecoder('big5');
+const name = h => big5.decode(new Uint8Array((h || '').match(/../g)?.map(x => parseInt(x, 16)) || []));
+let bots = [];
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { t.style.display = 'none'; }, 2500);
+}
+
+async function post(api, body) {
+  try {
+    const res = await fetch('/api/' + api, { method: 'POST', body: JSON.stringify(body) });
+    const r = await res.json();
+    toast((r.ok ? '✓ ' : '✗ ') + text(r.msg));
+  } catch (e) {
+    toast('✗ 連不到伺服器');
+  }
+  refresh();
+}
+
+function act(account, action, extra) {
+  post('botact', Object.assign({ account, action }, extra || {}));
+}
+
+function bar(v, max, color) {
+  const pct = max > 0 ? Math.round(v / max * 100) : 0;
+  return `<div class="bar"><div style="width:${pct}%;background:var(${color})"></div></div>`;
+}
+
+function row(b) {
+  const c = b.char;
+  const online = b.state === 'online';
+  const a = esc(b.account);
+  const leaders = bots.filter(x => x.state === 'online' && x.account !== b.account)
+    .map(x => `<option value="${esc(x.account)}">${esc(x.char ? name(x.char.nameHex) : x.account)}</option>`).join('');
+  const buttons = [];
+  if (online) {
+    buttons.push(`<button data-a="${a}" data-act="logout">登出</button>`);
+    buttons.push(`<button class="${c.auto ? 'on' : ''}" data-a="${a}" data-act="auto" data-on="${!c.auto}">自動戰鬥</button>`);
+    buttons.push(`<button class="${b.activity === 'grind' ? 'on' : ''}" data-a="${a}" data-act="grind" data-on="${b.activity !== 'grind'}">原地練等</button>`);
+    buttons.push(`<button data-a="${a}" data-act="encount">遇敵一次</button>`);
+    buttons.push(`<button data-a="${a}" data-act="hospital">回東醫</button>`);
+    buttons.push(`<button data-a="${a}" data-act="warp">傳送…</button>`);
+    if (c.leaderHex) buttons.push(`<button data-a="${a}" data-act="leave">離隊</button>`);
+    else if (leaders) buttons.push(`<select data-a="${a}" data-act="join"><option value="">加入隊伍…</option>${leaders}</select>`);
+  } else {
+    buttons.push(`<button class="primary" data-a="${a}" data-act="login">登入</button>`);
+  }
+  buttons.push(`<button class="${b.autologin ? 'on' : ''}" data-a="${a}" data-act="autologin" data-on="${!b.autologin}" title="伺服器啟動時自動登入">開機登入</button>`);
+  buttons.push(`<button class="danger" data-a="${a}" data-del="1">刪除</button>`);
+
+  const tags = [];
+  if (c) {
+    if (c.battle) tags.push('戰鬥中');
+    if (c.leaderHex) tags.push(c.isLeader ? '隊長' : '隊員（' + name(c.leaderHex) + '）');
+  }
+  return `<tr>
+    <td><strong>${a}</strong><div class="num">位置 ${b.slot}${b.charname ? '・' + esc(b.charname) : ''}</div></td>
+    <td><span class="state ${esc(b.state)}">${STATE[b.state] || esc(b.state)}</span>${b.err ? `<div class="err">${esc(text(b.err))}</div>` : ''}</td>
+    <td>${c ? `${esc(name(c.nameHex))}<div class="num">Lv ${c.lv}・${c.gold} G</div>` : '<span class="muted">—</span>'}</td>
+    <td>${c ? `<div class="num">${c.hp}/${c.maxHp}</div>${bar(c.hp, c.maxHp, '--hp')}<div class="num">${c.mp}/${c.maxMp}</div>${bar(c.mp, c.maxMp, '--mp')}` : ''}</td>
+    <td>${c ? `${esc(c.mapName)}<div class="num">${c.floor} (${c.x},${c.y})</div>` : ''}</td>
+    <td class="tags">${tags.map(t => `<span>${esc(t)}</span>`).join('')}</td>
+    <td><div class="actions">${buttons.join('')}</div></td>
+  </tr>`;
+}
+
+async function refresh() {
+  try {
+    const res = await fetch('/api/bots');
+    bots = await res.json();
+  } catch (e) {
+    document.getElementById('rows').innerHTML = '<tr><td colspan="7" class="err">連不到伺服器（10086 埠）</td></tr>';
+    return;
+  }
+  if (document.activeElement && document.activeElement.tagName === 'SELECT') return; // 選單打開時不重畫
+  const online = bots.filter(b => b.state === 'online').length;
+  document.getElementById('count').textContent = `${online} / ${bots.length} 在線`;
+  document.getElementById('rows').innerHTML = bots.length
+    ? bots.map(row).join('')
+    : '<tr><td colspan="7" class="muted">還沒有帳號，從上面新增。</td></tr>';
+}
+
+document.getElementById('rows').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const a = btn.dataset.a;
+  if (btn.dataset.del) {
+    if (confirm(`刪除帳號 ${a} 的管理設定？（不會刪遊戲裡的角色）`)) post('botdel', { account: a });
+    return;
+  }
+  const action = btn.dataset.act;
+  if (action === 'warp') {
+    const v = prompt('傳送到「地圖編號 x y」，例如法蘭城東門外：1000 281 88');
+    if (!v) return;
+    const [floor, x, y] = v.trim().split(/\s+/).map(Number);
+    act(a, 'warp', { floor, x, y });
+    return;
+  }
+  act(a, action, btn.dataset.on !== undefined ? { on: btn.dataset.on === 'true' } : undefined);
+});
+
+document.getElementById('rows').addEventListener('change', e => {
+  const sel = e.target;
+  if (sel.dataset.act === 'join' && sel.value) act(sel.dataset.a, 'join', { leader: sel.value });
+});
+
+document.getElementById('add').addEventListener('submit', e => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  post('botadd', Object.fromEntries(f.entries()));
+  e.target.reset();
+});
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

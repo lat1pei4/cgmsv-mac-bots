@@ -9,3 +9,5 @@ loadModule('loginGate')
 loadModule('http')
 loadModule('autobattle')
 -- loadModule('abtest') -- 自动战斗测试时才打开
+loadModule('botlogin')
+loadModule('botpanel')
