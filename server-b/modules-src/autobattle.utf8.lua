@@ -634,7 +634,7 @@ function Module:setNoEscape(battleIndex, on)
   noEscape[battleIndex] = on or nil
 end
 
--- 回东医：开 /auto 的玩家（队长或单人）离开战斗后，若「有人血不到一半、没人会补血、也没有回血药」
+-- 回东医：开 /auto 的玩家（队长或单人）离开战斗后，若「有人血不到 30%（或 2 人以上不到一半）、没人会补血、也没有回血药」
 -- 或「全队魔力剩不到 10%」，整队传送到法兰城东门医院（地图 1112，进门的位置），走到护士尤美儿（8,30）前面再补满血魔
 local HOSPITAL = { map = 1112, x = 12, y = 42 }
 local NURSE = { x = 8, y = 31, face = 0 } -- 站在护士正下方、面向北
@@ -658,14 +658,18 @@ end
 
 local function exhausted(members)
   spent, planned = {}, {} -- 战斗外：没有本回合预定的魔力和药
-  local low, canHeal, hasPotion, mp, maxMp = false, false, false, 0, 0
+  -- 血量：有人低于 30%，或 2 人以上低于一半（一人低于一半就回，太常跑医院）
+  local critical, halfCount, canHeal, hasPotion, mp, maxMp = false, 0, false, false, 0, 0
   for _, c in ipairs(members) do
-    if Char.GetData(c, CONST.对象_血) < Char.GetData(c, CONST.对象_最大血) * 0.5 then low = true end
+    local hp, maxHp = Char.GetData(c, CONST.对象_血), Char.GetData(c, CONST.对象_最大血)
+    if hp < maxHp * 0.3 then critical = true end
+    if hp < maxHp * 0.5 then halfCount = halfCount + 1 end
     local t = playerTechs(c)
     if t[61] or t[62] or t[63] then canHeal = true end
     if #potions(c) > 0 then hasPotion = true end
     mp, maxMp = mp + Char.GetData(c, CONST.对象_魔), maxMp + Char.GetData(c, CONST.对象_最大魔)
   end
+  local low = critical or halfCount >= 2
   return (low and not canHeal and not hasPotion) or mp < maxMp * 0.1
 end
 
@@ -709,21 +713,123 @@ local function healParty(members)
   end
 end
 
--- 到护士前：面向护士，补满整队
-function Module:atNurse(c)
-  Char.SetData(c, CONST.对象_方向, NURSE.face)
-  NLG.UpChar(c)
-  local members = partyOf(c) or { c }
-  healParty(members)
-  self:logInfo('hospital', Char.GetData(c, CONST.对象_名字), #members)
+-- 回城顺便卖掉背包的东西（使用者指定：魔石、头盔、卡片之类都卖），只留战斗用得到的（回血药）：
+-- 每个照道具价格（cgmsv.cf 没有卖价折扣设定）
+local function sellJunk(m)
+  local gold = 0
+  for slot = 8, 27 do
+    local it = Char.GetItemIndex(m, slot)
+    if it >= 0 and Item.GetData(it, CONST.道具_战斗可用) ~= 1 then
+      gold = gold + Item.GetData(it, CONST.道具_价格) * math.max(1, Item.GetData(it, CONST.道具_堆叠数))
+      Char.DelItemBySlot(m, slot)
+    end
+  end
+  if gold > 0 then Char.AddGold(m, gold) end
+  return gold
 end
 
--- 整队传到东医门口，再一格一格走到护士前补满血魔（队员不是队长时不处理，回 false）；也给管理页用。
+-- 受伤找东医的贝特里夫医师（data/npc.txt Injurydoctor，站在 11,18）治：站他正下方、面向北
+-- 费用是推测：NPC 参数「5|100」的 100 当一人一次的价钱；钱不够就不治
+local DOCTOR = { x = 11, y = 19, face = 0 }
+local CURE_COST = 100
+local function cureInjury(members)
+  local n = 0
+  for _, m in ipairs(members) do
+    if Char.GetData(m, CONST.对象_受伤) > 0 and Char.GetData(m, CONST.对象_金币) >= CURE_COST then
+      Char.SetData(m, CONST.对象_金币, Char.GetData(m, CONST.对象_金币) - CURE_COST)
+      Char.SetData(m, CONST.对象_受伤, 0)
+      NLG.UpChar(m)
+      n = n + 1
+    end
+  end
+  return n
+end
+
+-- 到护士前：面向护士，补满整队，卖背包杂物；有人受伤再走去医师那里治（使用者指定）
+function Module:atNurse(c)
+  Char.SetData(c, CONST.对象_方向, NURSE.face)
+  local members = partyOf(c) or { c }
+  healParty(members)
+  local sold, injured = 0, false
+  for _, m in ipairs(members) do
+    sold = sold + sellJunk(m)
+    if Char.GetData(m, CONST.对象_受伤) > 0 and Char.GetData(m, CONST.对象_金币) >= CURE_COST then injured = true end -- 付不起就不白跑
+  end
+  for _, m in ipairs(members) do NLG.UpChar(m) end
+  local name = Char.GetData(c, CONST.对象_名字)
+  self:logInfo('hospital', name, #members, 'sold', sold)
+  if not injured then return end
+  local dirs = pathTo(HOSPITAL.map, NURSE.x, NURSE.y, DOCTOR.x, DOCTOR.y)
+  self:after(c, dirs and math.ceil(#dirs * WALK_MS / 1000) or 0, function()
+    if dirs then
+      Char.Warp(c, 0, HOSPITAL.map, DOCTOR.x, DOCTOR.y)
+      Char.SetData(c, CONST.对象_方向, DOCTOR.face)
+    end
+    self:logInfo('doctor', name, 'cured', cureInjury(members))
+  end)
+end
+
+-- 地图之间的出入口（data/warp.txt）：LINKS[地图][相邻地图] = { 出口 x, y, 进去后 x, y }
+local LINKS = {
+  [100] = { [1000] = { 470, 196, 277, 88 } },                               -- 芙蕾雅 → 法兰城东门
+  [1000] = { [100] = { 281, 88, 475, 196 }, [1112] = { 221, 83, 12, 42 } }, -- 法兰城 → 芙蕾雅、东医
+  [1112] = { [1000] = { 12, 42, 221, 83 } },                                -- 东医 → 法兰城
+}
+local UNKNOWN_TRAVEL_SECS = 60 -- 路线不在 LINKS 里、或走不到时
+
+---走过去要几秒（不真的走，算脚程）：地图之间照 LINKS 找路线，每张图内用 pathTo 算步数，每步 WALK_MS
+function Module:travelSecs(floor, x, y, toFloor, tx, ty)
+  local prev, queue, head = { [floor] = false }, { floor }, 1
+  while queue[head] and prev[toFloor] == nil do
+    local f = queue[head]
+    head = head + 1
+    for nf in pairs(LINKS[f] or {}) do
+      if prev[nf] == nil then
+        prev[nf] = f
+        table.insert(queue, nf)
+      end
+    end
+  end
+  if prev[toFloor] == nil then return UNKNOWN_TRAVEL_SECS end
+  local floors, f = {}, toFloor
+  while f do
+    table.insert(floors, 1, f)
+    f = prev[f]
+  end
+  local steps, cx, cy = 0, x, y
+  for i, fl in ipairs(floors) do
+    local link = LINKS[fl][floors[i + 1]] or { tx, ty }
+    local dirs = pathTo(fl, cx, cy, link[1], link[2])
+    if not dirs then return UNKNOWN_TRAVEL_SECS end
+    steps = steps + #dirs
+    cx, cy = link[3], link[4]
+  end
+  return math.ceil(steps * WALK_MS / 1000)
+end
+
+---排程：原地等 secs 秒（算脚程）再执行 fn；等的期间 busy()。角色下线或换人就取消
+function Module:after(c, secs, fn)
+  local name = Char.GetData(c, CONST.对象_名字)
+  walking[c] = Cron.RunAt(os.time() + secs, function()
+    walking[c] = nil
+    if Char.IsValidCharIndex(c) and Char.GetData(c, CONST.对象_名字) == name then fn() end
+  end)
+end
+
+-- 整队回东医：先在原地等走到东医门口的时间，再传进门、一格一格走到护士前补满血魔（队员不是队长时不处理，回 false）；也给管理页用。
 -- NLG.WalkMove 不会带队员走（实测），队员第 k 个照队长走过的路晚 k 格跟上，最后排在队长后面
 function Module:toHospital(c)
   local members = partyOf(c)
   if not members or Battle.GetCurrentBattle(c) >= 0 then return false end
   if walking[c] then return true end
+  local secs = self:travelSecs(Char.GetData(c, CONST.CHAR_地图), Char.GetData(c, CONST.CHAR_X), Char.GetData(c, CONST.CHAR_Y),
+    HOSPITAL.map, HOSPITAL.x, HOSPITAL.y)
+  self:logInfo('to hospital', Char.GetData(c, CONST.对象_名字), secs)
+  self:after(c, secs, function() self:walkToNurse(c, members) end)
+  return true
+end
+
+function Module:walkToNurse(c, members)
   Char.Warp(c, 0, HOSPITAL.map, HOSPITAL.x, HOSPITAL.y) -- 传队长，队员会跟着
   local dirs = pathTo(HOSPITAL.map, HOSPITAL.x, HOSPITAL.y, NURSE.x, NURSE.y)
   if not dirs then
