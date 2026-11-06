@@ -219,7 +219,12 @@ local function decide(b, actor, techs, v, side)
 end
 
 function Module:act(b, actor, techs, side)
-  local com, target, id, label = decide(b, actor, techs, view(b, side), side)
+  local com, target, id, label
+  if Char.GetData(actor, CONST.对象_血) <= 0 then -- 倒下也要给指令，否则伺服器会一直等到 420 秒逾时
+    com, target, id, label = CONST.BATTLE_COM.BATTLE_COM_GUARD, -1, -1, '倒下'
+  else
+    com, target, id, label = decide(b, actor, techs, view(b, side), side)
+  end
   Battle.ActionSelect(actor, com, target, id) -- 回传值实测成功也是 0，不检查
   if id >= 0 then
     spent[actor] = (spent[actor] or 0) + Char.CalcConsumeFp(actor, id)
@@ -237,7 +242,7 @@ function Module:onTurn(b)
   spent, planned = {}, {}
   for slot = 0, 19 do
     local p = Battle.GetPlayer(b, slot)
-    if p >= 0 and enabled[p] and Battle.IsWaitingCommand(p) == 1 and Char.GetData(p, CONST.对象_血) > 0 then
+    if p >= 0 and enabled[p] and Battle.IsWaitingCommand(p) == 1 then
       local side = slot < 10 and 0 or 1
       self:act(b, p, playerTechs(p), side)
       local pet = Battle.GetPlayer(b, slot + 5)
