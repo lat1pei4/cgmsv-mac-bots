@@ -10,7 +10,7 @@ import time
 import urllib.request
 
 API = 'http://127.0.0.1:10086/api/'
-FIELD = (100, 470, 196)  # 芙蕾雅，會遇敵
+FIELD = (100, 500, 230)  # 芙蕾雅東門外 1004 區，會遇敵（470,196 是回城的傳送格）
 NURSE = (1112, 8, 31)    # 東醫護士正下方
 
 
@@ -83,7 +83,7 @@ def main():
               '90 秒內沒結束：看 pktlog.py 該帳號 LYIm')
 
     act(leader, 'hospital')
-    arrived = wait(lambda s: pos(s[leader]) == NURSE, 15)
+    arrived = wait(lambda s: pos(s[leader]) == NURSE, 60)  # 先在原地等走到東醫的腳程
     check('走到東醫護士前', arrived, str(pos(bots()[leader])))
     if arrived:
         s = bots()
@@ -102,15 +102,15 @@ def main():
     # 練等：在野外開練等 → 打完一場回東醫 → 補完自己傳回練功點
     act(leader, 'warp', floor=FIELD[0], x=FIELD[1], y=FIELD[2])
     act(leader, 'grind', on=True)
-    check('練等自動遇敵', wait(lambda s: s[leader]['char']['battle'] and s[leader].get('activity') == 'grind', 10))
+    check('練等自動遇敵', wait(lambda s: s[leader]['char']['battle'] and s[leader].get('activity') == 'grind', 90))  # 每步照遇敵率擲骰
     sent = False
     for _ in range(5):  # 練等每 3 秒就遇下一場，戰鬥中不能回東醫，抓空檔
         wait(lambda s: not s[leader]['char']['battle'], 90)
         if act(leader, 'hospital')['ok']:
             sent = True
             break
-    check('練等中回東醫', sent and wait(lambda s: pos(s[leader]) == NURSE, 15))
-    check('補完自己回練功點', wait(lambda s: pos(s[leader])[0] == FIELD[0], 10), str(pos(bots()[leader])))
+    check('練等中回東醫', sent and wait(lambda s: pos(s[leader]) == NURSE, 60))
+    check('補完自己回練功點', wait(lambda s: pos(s[leader])[0] == FIELD[0], 90), str(pos(bots()[leader])))  # 回程腳程（受傷時先繞去醫師）
     act(leader, 'grind', on=False)
     wait(lambda s: not s[leader]['char']['battle'], 90)
 
