@@ -11,3 +11,4 @@ loadModule('autobattle')
 -- loadModule('abtest') -- 自动战斗测试时才打开
 loadModule('botlogin')
 loadModule('botpanel')
+loadModule('devreload') -- 开发用热重载（tools/deploy-module.sh）

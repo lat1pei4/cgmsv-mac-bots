@@ -2,22 +2,26 @@
 
 個人專案：不登 GTD。使用者說明看 `SETUP.md`；Lua API 看 `docs/api/README.md`（找函式先查這裡，不要用到才找）。
 
-## Lua 模組：改 → 轉碼 → 檢查 → 部署
+## Lua 模組：改 → 部署（不重啟）
 
-- 原始碼只改 `server-b/modules-src/*.utf8.lua`（UTF-8）。部署檔 `server-b/gmsv/lua/Modules/*.lua` 由 `python3 -I tools/convert_lua_module.py <src> <dst>` 產生：字串轉 Big5（遊戲端是台版）、其餘轉 GBK（引擎語系）。
-- 轉碼失敗會留下舊檔：註解或字串裡有 GBK 沒有的字（例：`↔`）就失敗，**看 exit code**，不要接著部署。
-- 語法檢查：本機只有 Lua 5.5。把非 ASCII 字元換成 `X`，再把 `for x = ... do` 改寫成 `for x_0 = ... do local x = x_0`，然後 `luac -p`。伺服器是 LuaJIT：沒有 `table.unpack`，有 `bit`／`ffi`。
+- 原始碼只改 `server-b/modules-src/*.utf8.lua`（UTF-8）與 `modules-src/www/*.html`。
+- 部署一律 `bash tools/deploy-module.sh 模組名…`：轉碼（`convert_lua_module.py`：字串轉 Big5、其餘轉 GBK）→ `luajit -b` 語法檢查（本機 LuaJIT 2.1，和伺服器同一套）→ 複製 → 經 `devreload` 模組的 `/api/reload` 熱重載。任何一個失敗就整批不部署。
+- 新模組或臨時探針也用它：沒載入過的會直接載入，不必改 ModuleConfig、不必重啟（探針用完刪掉原始碼與部署檔，下次啟動就不會再載入）。
+- 註解或字串裡有 GBK 沒有的字（例：`↔`）會轉碼失敗。
+- 伺服器是 LuaJIT：沒有 `table.unpack`，有 `bit`／`ffi`。
+- 改完 botlogin／botpanel／autobattle 跑 `python3 -I tools/bot_smoke.py`（登入、組隊、打一場、回東醫，9 項 PASS／FAIL，約 10 秒）。
 - Lua 字串的反斜線：協定裡的 `\\z` 要寫成 `'\\\\z'`。
 - 改 GBK／Big5 檔用 `LC_ALL=C sed`，否則 `illegal byte sequence`。
 - `ModuleConfig.lua` 是 GBK＋CRLF，用 Python 以位元組附加。附加前先確認沒有重複的 `loadModule`（重複會載兩次）。
 
-## 伺服器重啟
+## 伺服器重啟（只有改 ModuleConfig、http、devreload、引擎設定時才需要）
 
 1. `kill -INT <pgrep -f '^cgmsv.exe'>`，等程序消失（會存檔）。
 2. `sqlite3 server-b/gmsv/data.db3 'delete from tbl_lock; delete from tbl_lock2;'`
 3. `bash tools/run-server.sh`，等 9030 埠。`server-b.log` 出現 `Unhandled`（引擎偶發崩潰，`0x1401C877B`）就 `pkill -f winedbg` 後重開；崩潰 log 在下次啟動時另存成 `server-b-crash-*.log`。`run-start.sh` 會自動重試一次。
 - 重啟會踢掉使用者的遊戲端，動手前先講。
-- log：`server-b.log`（Big5，`LC_ALL=C grep -a | iconv -f big5 -t utf-8 -c`）；封包：`server-b/gmsv/log/packet_YYYYMMDDHH.txt`（已解碼的明文，真遊戲端的行為從這裡查）。
+- log：`server-b.log`（Big5，`LC_ALL=C grep -a | iconv -f big5 -t utf-8 -c`）。
+- 封包：`python3 -I tools/pktlog.py <帳號|all> [regex] [-A 行數] [-f 檔案]`，讀 `server-b/gmsv/log/packet_*.txt`（已解碼的明文）。真遊戲端在某情境送了什麼，從這裡查（例：`pktlog.py 111 'LYIm C\|20' -A 10`）。
 
 ## 編碼
 

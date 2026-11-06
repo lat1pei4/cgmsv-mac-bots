@@ -14,6 +14,9 @@
 | `bash tools/run-game.sh` | 只開遊戲。黑畫面或崩潰時再跑一次 |
 | `bash tools/run-server.sh` | 只開伺服器 |
 | `CG_SPEED=2 bash tools/run-start.sh` | **遊戲端加速**（2 倍；可用小數）。只影響遊戲程序的 `GetTickCount`／`Sleep`，見下方「加速」 |
+| `bash tools/deploy-module.sh 模組名…` | 改完 `modules-src/` 的 Lua 或網頁後部署：轉碼、LuaJIT 語法檢查、熱重載，**不重啟伺服器**，不會踢掉遊戲端（需要 `brew install luajit`） |
+| `python3 -I tools/pktlog.py 帳號 [regex]` | 查伺服器封包記錄：某帳號的收送順序（`<-` 遊戲端送出、`->` 伺服器送出） |
+| `python3 -I tools/bot_smoke.py` | bot 冒煙測試：aitest01／02 登入、組隊、打一場、回東醫，逐項 PASS／FAIL |
 
 - 帳號：`111`。第一次登入時由 autoRegister 自動註冊
 - **不要直接關視窗或強制結束伺服器**：伺服器只在正常關機時存檔（B 的設定檔沒有定期存檔的選項）
