@@ -65,13 +65,21 @@ crossgate/
 
 ## 自動戰鬥與測試
 
-- 補給用完（有人血不到一半、沒人會補血、也沒有回血藥，或全隊魔力剩不到 10%）時，戰鬥結束後整隊傳到東醫（地圖 1112 的 (12,42)）並補滿血魔，不收錢。觸發事件是 `ResetCharaBattleStateEvent`（逃跑或打贏後，角色離開戰場時觸發）。傳送隊長時，隊員會一起過去
+- 補給用完（有人血不到一半、沒人會補血、也沒有回血藥，或全隊魔力剩不到 10%）時，戰鬥結束後整隊傳到東醫門口（地圖 1112 的 (12,42)），再每 0.4 秒走一格到護士尤美兒 (8,30) 正下方補滿血魔，目前不收錢（價格待量）。`NLG.WalkMove` 不會帶隊員走，隊員照隊長走過的路晚一格跟（5 人實測排成一列）。觸發事件是 `ResetCharaBattleStateEvent`（逃跑或打贏後，角色離開戰場時觸發）。傳送隊長時，隊員會一起過去
 - 玩家在聊天打 `/auto` 開關（`server-b/modules-src/autobattle.utf8.lua`）。只用畫面看得到的資訊：我方血量、魔力、倒下、異常狀態；敵方位置、血條比例、倒下、異常狀態
 - 無頭測試：`ModuleConfig.lua` 打開 `loadModule('abtest')`，伺服器啟動 30 秒後 24 隊假人（隨機職業 1～4 人、隨機技能組合、Lv 5／20／40／70）各打 4 場，log 的 `summary` 行有 WIN／LOSE／ESCAPED、回合數、秒數。96 場約 70 秒
 - 逃跑成功時引擎回報的勝方是敵方，要用「還有人活著」區分逃跑和全滅
 - 對照實驗：每隊另有一支雙胞胎（`arm=B`，同職業、同技能等級、同樣的怪，只差不逃跑），summary 行有 `pair=`／`arm=`／`n=` 可逐場比對
 - 戰鬥中用道具：`Battle.ActionSelect(角色, BATTLE_COM_ITEM, 目標位置, 背包位置 8～27)`（`modules-src/itemprobe.utf8.lua` 實測）。回血藥「戰鬥可用」＝1、參數 `LPxxx`；回魔的料理／食物戰鬥中不能用
 - 倒下的角色也要給指令，否則伺服器等 420 秒逾時
+
+## 無頭角色（真帳號，不開遊戲）
+
+- 管理頁：伺服器啟動後打開 `http://127.0.0.1:10086/bots.html`（http 模組已改成只聽 `127.0.0.1`，原檔 `lua/Modules/http.lua.orig`）。可新增帳號（沒有的帳號由 autoRegister 自動建立，該位置沒角色時用填的名字建角色，名字限英數字）、登入／登出、自動戰鬥、原地練等、遇敵一次、回東醫、傳送、組隊
+- `modules-src/botlogin.utf8.lua`：模組自己用 LuaJIT FFI（Winsock）連本機 9030，走和遊戲端一樣的登入流程，連線不斷，角色就是一般在線玩家；登出＝關連線，引擎照常存檔。帳號存在 `data.db3` 的 `bot_account` 表，`autologin=1` 的在伺服器啟動 10 秒後自動登入
+- 協定是明文（`指令 參數… ` 加換行，用 port 9031 的抓包代理確認），不是 xgmsv 那套加密。戰鬥中遊戲端要做的事 bot 也照做：每回合回兩次 `Rg N`（不下指令，引擎再觸發 `AutoBattleCommandEvent` 由 autobattle 出招），戰鬥結束（`LYIm C|20`）回 `eL 0` 回到地圖；不回就會一直卡在戰鬥中
+- 編碼：`Iconv` 只有 GBK↔UTF-8。API 的訊息回英數代碼（網頁翻中文），角色名回 Big5 原始位元組的 hex（網頁用 `TextDecoder('big5')` 解）
+- `modules-src/botpanel.utf8.lua`：網頁用的 API（`GET /api/bots`、`POST /api/botact`／`botadd`／`botdel`）
 
 ## 卡關紀錄
 
@@ -81,9 +89,12 @@ crossgate/
 - **崩潰 `0x7BF41239`（wow64cpu.dll）、包裝程式黑畫面** → `renderer=gdi`
 - **角色清單顯示 locked** → 異常關閉留下 `tbl_lock`；`run-start.sh` 會在伺服器沒在跑時清除
 - **新伺服器卡住不載入** → 用 `pkill` 殺掉後，wineserver 還殘留舊程序；一律用 `run-stop.sh`
+- **伺服器偶爾啟動就崩潰**（約 10 次 2 次）：`server-b.log` 開頭 `Unhandled page fault on read access to 0000000000000178 at address 00000001401C877B`，在開機畫面後、載入 Lua 前，引擎本體的工作執行緒。`pkill -f winedbg` 後重開即可。log 會被下次啟動覆寫，要查根因得先保留舊 log
+- **bot 建角色偶爾 `DZ failed -1`**：新帳號同時登入 3 個時 2 個失敗、之後單獨重登成功；改成一次只建一個也一樣失敗，根因未明。再按一次登入即可
 
 ## 下一步
 
 - [ ] AI 隊友：傭兵模組（`xmancheng/cgmsv-lua` 的 `heroes` 或 `精简佣兵`）在 26.8d 上能不能用
-- [ ] 只讓自己登入：組好隊後拿掉 `autoRegister`，http 模組改成只聽 `127.0.0.1`
+- [ ] 只讓自己登入：組好隊後拿掉 `autoRegister`
+- [x] http 模組改成只聽 `127.0.0.1`（2026-11-06，bot 管理 API 不對區網開放）
 - [x] 關閉反作弊：`cgmsv.cf` 的 `anitcheatingflg=0`、`highspeedblock=0`（2026-11-06，原檔 `cgmsv.cf.bak-20261106`），為遊戲端加速做準備
