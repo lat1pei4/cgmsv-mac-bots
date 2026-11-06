@@ -1,0 +1,24 @@
+# 白名單：只追蹤自己寫的檔案（Wine、遊戲本體、伺服器程式、資料、密碼檔都不進版控）
+/*
+!/.gitignore
+!/SETUP.md
+!/cg_protocol_notes.md
+
+!/tools/
+/tools/*
+!/tools/*.sh
+!/tools/*.py
+!/tools/*.reg
+
+!/server-b/
+/server-b/*
+!/server-b/modules-src/
+!/server-b/gmsv/
+/server-b/gmsv/*
+!/server-b/gmsv/cgmsv.cf
+!/server-b/gmsv/lua/
+/server-b/gmsv/lua/*
+!/server-b/gmsv/lua/ModuleConfig.lua
+
+__pycache__/
+.DS_Store
