@@ -76,6 +76,25 @@ local function partyIn(b)
   end
 end
 
+-- 时间追踪（只追前 3 队）：找出每回合 6.5 秒花在哪个阶段
+function Module:stamp(tag, b)
+  local k = partyIn(b)
+  if not k or k > 3 then
+    return
+  end
+  local waiting = {}
+  if tag == 'cmd' then -- autobattle 下完指令后，还在等指令的位置
+    for slot = 0, 19 do
+      local u = Battle.GetPlayer(b, slot)
+      if u >= 0 and Battle.IsWaitingCommand(u) == 1 then
+        table.insert(waiting, slot)
+      end
+    end
+  end
+  self:logInfo('t', tag, 'party=', k, 'b=', b, 'turn=', Battle.GetTurn(b), 'time=', os.time(),
+    'clock=', string.format('%.3f', os.clock()), 'waiting=', table.concat(waiting, ','))
+end
+
 function Module:startBattle(k)
   local p = parties[k]
   rest(p.members)
@@ -137,6 +156,10 @@ end
 function Module:onLoad()
   self:logInfo('load')
   self:regCallback('BattleOverEvent', Func.bind(self.onBattleOver, self))
+  self:regCallback('BattleStartEvent', function(b) self:stamp('start', b) end)
+  self:regCallback('BeforeBattleTurnEvent', function(b) self:stamp('cmd', b) end)
+  self:regCallback('BeforeBattleTurnStartEvent', function(b) self:stamp('proc', b) end)
+  self:regCallback('AfterBattleTurnEvent', function(b) self:stamp('after', b) end)
   Cron.RunAt(os.time() + 30, function() self:setup() end)
 end
 
