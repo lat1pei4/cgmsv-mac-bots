@@ -13,6 +13,7 @@
 | `bash tools/run-status.sh` | 查看伺服器、遊戲、連線、帳號鎖、最近備份 |
 | `bash tools/run-game.sh` | 只開遊戲。黑畫面或崩潰時再跑一次 |
 | `bash tools/run-server.sh` | 只開伺服器 |
+| `CG_SPEED=2 bash tools/run-start.sh` | **遊戲端加速**（2 倍；可用小數）。只影響遊戲程序的 `GetTickCount`／`Sleep`，見下方「加速」 |
 
 - 帳號：`111`。第一次登入時由 autoRegister 自動註冊
 - **不要直接關視窗或強制結束伺服器**：伺服器只在正常關機時存檔（B 的設定檔沒有定期存檔的選項）
@@ -52,6 +53,20 @@ crossgate/
 - **Lua 不繁化**：轉換後模組會壞掉（Big5 第二位元組 0x5C 被當成跳脫字元，加上中文常數名稱對不上，例如 autoUnlock 失效、帳號一直被鎖）。Lua 送出的訊息維持簡體亂碼
 - **無法處理**：cgmsv 包裝程式（有 VMProtect 類的保護殼）的標題列、狀態列提示。論壇上也沒有繁體版（2026-11-06 查 bbs.cgmsv.com 674／1120／1202／1489 帖）
 - 待觀察：`data/` 裡有 3,787 處 Big5 字的第二位元組是 `\`（功、許、餐、蓋…），目前看起來正常
+
+## 加速
+
+- `tools/speed/winmm.dll`：代理 winmm（轉發 Wine winmm 全部匯出），`CG_SPEED>1` 且程序是 `cg.exe`／`cgmsv.exe` 時，把 kernel32 的 `GetTickCount`／`Sleep` 開頭改成跳到加速版（時間取自 QPC）
+- 包裝程式 `cgmsv.exe` 是加殼的遊戲本體，遊戲在它自己的程序裡跑（不會另開 `cg.exe`），所以改 IAT 無效，要 inline hook
+- `run-game.sh` 在有 `CG_SPEED` 時才複製 DLL 並設 `WINEDLLOVERRIDES=winmm=n,b`；沒設時 Wine 用內建 winmm
+- 重新編譯：`tools/speed/build.sh`（用 scratchpad venv 裡的 `ziglang`，venv 不在 repo 裡，消失時重建：`python3 -m venv v && v/bin/pip install ziglang`）
+- 伺服器端已關反作弊（`anitcheatingflg=0`、`highspeedblock=0`）
+
+## 自動戰鬥與測試
+
+- 玩家在聊天打 `/auto` 開關（`server-b/modules-src/autobattle.utf8.lua`）。只用畫面看得到的資訊：我方血魔比例、倒下、異常狀態；敵方位置、倒下、異常狀態
+- 無頭測試：`ModuleConfig.lua` 打開 `loadModule('abtest')`，伺服器啟動 30 秒後 20 隊假人各打 3 場，log 的 `summary` 行有勝負、回合數、秒數。約 0.8 秒／回合
+- 倒下的角色也要給指令，否則伺服器等 420 秒逾時
 
 ## 卡關紀錄
 
