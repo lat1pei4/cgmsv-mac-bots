@@ -27,7 +27,11 @@ local PORT = 9030
 local MACHINE, MAC = 'd43d504b83f30f4a774c5e42b3ac0e99', '0013253e002a' -- 游戏端登入时送的机器码与网卡位址（实际封包）
 local WOULDBLOCK, FIONBIO = 10035, -2147195266
 local ECHO_SECS = 30 -- 游戏端闲置时也会定期送 Or（连线检查）
+-- 游戏端每 60 秒送 DE（引擎记为 FC）：进游戏 5 分钟没收到就断线（"Client not send FC"），
+-- 送太勤会被当成加速外挂断线（"CHEAT!! Client Accelerate 200.00%"，30 秒一次时）
+local TICK_SECS = 60
 local TIMEOUT_SECS = 30 -- 登入流程卡住多久算失败
+local CREATE_TRIES = 3 -- 建角色失败（DZ failed）重试次数
 
 local conns = {} -- [account] = {account, password, slot, s, state, buf, since, lastEcho, char, err}
 local recvBuf = ffi.new('char[65536]')
@@ -91,6 +95,10 @@ local function onPacket(self, c, plain)
   elseif c.state == 'list' and op == 'DZ' then
     if plain:match('^DZ successful') then
       sendLine(c, 'Gp')
+    elseif (c.createTries or 0) < CREATE_TRIES then
+      -- 引擎同时建多个角色时各自写 SQLite，抢不到锁（log：database is locked）不等待就回 DZ failed -1，重建一次就好
+      c.createTries, c.created = (c.createTries or 0) + 1, false
+      sendLine(c, 'Gp')
     else
       close(c, 'failed', 'create_failed')
       self:logInfo('create failed', c.account, plain)
@@ -146,9 +154,13 @@ local function poll(self)
       if c.state == 'enter' then
         local idx = NLG.FindUser(c.account)
         if idx >= 0 then
-          c.char, c.state, c.lastEcho = idx, 'online', now
+          c.char, c.state, c.lastEcho, c.lastTick = idx, 'online', now, now
           self:logInfo('online', c.account, idx)
         end
+      end
+      if c.state == 'online' and now - c.lastTick >= TICK_SECS then
+        sendLine(c, 'DE')
+        c.lastTick = now
       end
       if c.state == 'online' and now - c.lastEcho >= ECHO_SECS then
         sendLine(c, 'Or nr')
