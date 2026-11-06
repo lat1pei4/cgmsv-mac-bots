@@ -158,11 +158,11 @@ maxallocpoint=63
 // 深蓝九号等级检查配置， 1=原版设定，0=关闭，2=按怪物等级与玩家等级比值调整，默认：1 
 checkTohelosLevel=1
 // 最高制作技能上限，默认15，最大30
-maxcraftskilllevel=15
+maxcraftskilllevel=10
 // 最高人物skill技能上限，默认15，最大30
-maxskilllevel=15
+maxskilllevel=10
 // 最高技能tech上限，默认15，最大30
-maxtechlevel=15
+maxtechlevel=10
 // 暴击模式，默认0，0 = 普通模式 1 = 倍率模式 2 = 无 3 = 破防模式
 criticaldmgmode=0
 // 倍率模式时criticalRate为暴击率，默认1.5, 破防模式时criticalRate为破防率，0.7为无视30%防御
