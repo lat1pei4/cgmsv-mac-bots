@@ -5,9 +5,17 @@ GMSV="$CG_ROOT/server-b/gmsv"
 if ! lsof -nP -iTCP:9030 -sTCP:LISTEN >/dev/null 2>&1; then
   # 伺服器沒在跑時，殘留的帳號鎖一定是上次異常結束留下的
   sqlite3 "$GMSV/data.db3" "delete from tbl_lock; delete from tbl_lock2;"
-  bash "$CG_ROOT/tools/run-server.sh"
-  for i in $(seq 1 30); do
-    lsof -nP -iTCP:9030 -sTCP:LISTEN >/dev/null 2>&1 && break
+  for try in 1 2; do
+    bash "$CG_ROOT/tools/run-server.sh"
+    for i in $(seq 1 30); do
+      lsof -nP -iTCP:9030 -sTCP:LISTEN >/dev/null 2>&1 && break
+      LC_ALL=C grep -aq 'Unhandled' "$CG_ROOT/server-b.log" && break
+      sleep 2
+    done
+    # 引擎偶發啟動崩潰（約 10 次 2 次）：關掉 Wine 的除錯器再開一次
+    LC_ALL=C grep -aq 'Unhandled' "$CG_ROOT/server-b.log" || break
+    echo "伺服器啟動時崩潰，重試一次（崩潰 log 會另存成 server-b-crash-*.log）"
+    pkill -f winedbg
     sleep 2
   done
   lsof -nP -iTCP:9030 -sTCP:LISTEN >/dev/null 2>&1 || { echo "伺服器 60 秒內沒有起來，請看 server-b.log"; exit 1; }

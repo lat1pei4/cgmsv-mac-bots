@@ -15,7 +15,7 @@
 
 1. `kill -INT <pgrep -f '^cgmsv.exe'>`，等程序消失（會存檔）。
 2. `sqlite3 server-b/gmsv/data.db3 'delete from tbl_lock; delete from tbl_lock2;'`
-3. `bash tools/run-server.sh`，等 9030 埠。40 秒沒起來就看 `server-b.log` 開頭：`page fault ... 0x1401C877B` 是引擎偶發崩潰，`pkill -f winedbg` 後重開。
+3. `bash tools/run-server.sh`，等 9030 埠。`server-b.log` 出現 `Unhandled`（引擎偶發崩潰，`0x1401C877B`）就 `pkill -f winedbg` 後重開；崩潰 log 在下次啟動時另存成 `server-b-crash-*.log`。`run-start.sh` 會自動重試一次。
 - 重啟會踢掉使用者的遊戲端，動手前先講。
 - log：`server-b.log`（Big5，`LC_ALL=C grep -a | iconv -f big5 -t utf-8 -c`）；封包：`server-b/gmsv/log/packet_YYYYMMDDHH.txt`（已解碼的明文，真遊戲端的行為從這裡查）。
 

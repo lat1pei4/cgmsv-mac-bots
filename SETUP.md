@@ -89,7 +89,7 @@ crossgate/
 - **崩潰 `0x7BF41239`（wow64cpu.dll）、包裝程式黑畫面** → `renderer=gdi`
 - **角色清單顯示 locked** → 異常關閉留下 `tbl_lock`；`run-start.sh` 會在伺服器沒在跑時清除
 - **新伺服器卡住不載入** → 用 `pkill` 殺掉後，wineserver 還殘留舊程序；一律用 `run-stop.sh`
-- **伺服器偶爾啟動就崩潰**（約 10 次 2 次）：`server-b.log` 開頭 `Unhandled page fault on read access to 0000000000000178 at address 00000001401C877B`，在開機畫面後、載入 Lua 前，引擎本體的工作執行緒。`pkill -f winedbg` 後重開即可。log 會被下次啟動覆寫，要查根因得先保留舊 log
+- **伺服器偶爾啟動就崩潰**（約 10 次 2 次）：`server-b.log` 開頭 `Unhandled page fault on read access to 0000000000000178 at address 00000001401C877B`，在開機畫面後、載入 Lua 前，引擎本體的工作執行緒。`run-start.sh` 偵測到就 `pkill -f winedbg` 自動重試一次；`run-server.sh` 啟動前把上次的崩潰 log 另存成 `server-b-crash-<時間>.log`，累積幾份再比對是不是每次同一處
 - **bot 建角色偶爾 `DZ failed -1`**：新帳號同時登入 3 個時 2 個失敗、之後單獨重登成功；改成一次只建一個也一樣失敗，根因未明。再按一次登入即可
 
 ## 下一步
