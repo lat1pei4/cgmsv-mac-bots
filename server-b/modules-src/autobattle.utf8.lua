@@ -9,21 +9,26 @@ local focus = {}     -- [battleIndex] = 集火目标位置
 local turnState = {} -- [battleIndex] = {turn, spent, planned, dummiesDone}
 local spent = {}     -- 处理中这场战斗：[charIndex] = 本回合已排定要花的魔力（一回合两动时用）
 local planned = {}   -- 处理中这场战斗：[slot] = 本回合已有人要补血／复活／洁净的我方位置，不重复
+local acted = {}     -- 处理中这场战斗：[charIndex] = 本回合已下过指令
+local noEscape = {}  -- [battleIndex] = true：不逃跑（测试对照组用）
+local history = {}   -- [battleIndex][side] = 每回合一笔 {hp = 我方人物血量比例总和, foe = 敌方血条比例总和}
 
 -- 切到这场战斗的本回合状态（新回合就重建）
 local function enterTurn(b)
   local turn = Battle.GetTurn(b)
   local s = turnState[b]
+  if s and turn < s.turn then -- 同一个战斗编号开了新的一场（全员逃跑时不一定有 BattleOverEvent），清掉旧状态
+    focus[b], history[b], s = nil, nil, nil
+  end
   if not s or s.turn ~= turn then
-    s = { turn = turn, spent = {}, planned = {} }
+    s = { turn = turn, spent = {}, planned = {}, acted = {} }
     turnState[b] = s
   end
-  spent, planned = s.spent, s.planned
+  spent, planned, acted = s.spent, s.planned, s.acted
   return s
 end
 
 local MP_RESERVE = 0.3 -- 会补血的角色，攻击技能只在剩余魔力 >= 30% 时才放
-local history = {}     -- [battleIndex][side] = 每回合一笔 {hp = 我方人物血量比例总和, foe = 敌方血条比例总和}
 
 -- 记下本回合看得到的战况（每回合每边一笔）
 local function observe(b, side, v)
@@ -53,7 +58,7 @@ local function losing(hs)
   if loss <= 0 then return false end
   local dealt = (hs[1].foe - now.foe) / (n - 1)
   local die = now.hp / loss
-  return die <= 2 and die < now.foe / math.max(dealt, 0.05)
+  return die <= 1 and die < now.foe / math.max(dealt, 0.05)
 end
 
 local function shuffled(list)
@@ -71,8 +76,11 @@ local function comOf(g)
   if g == 1 or g == 3 then return C.BATTLE_COM_P_PARAMETER end
   if g == 4 then return C.BATTLE_COM_P_SPIRACLESHOT end
   if g == 5 then return C.BATTLE_COM_P_GUARDBREAK end
+  if g == 7 then return C.BATTLE_COM_P_BODYGUARD end
   if g >= 19 and g <= 30 then return C.BATTLE_COM_P_MAGIC end
+  if g >= 32 and g <= 49 then return C.BATTLE_COM_P_STATUSCHANGE end
   if g >= 61 and g <= 63 then return C.BATTLE_COM_P_HEAL end
+  if g >= 64 and g <= 66 then return C.BATTLE_COM_P_LP_RECOVERY end
   if g == 67 then return C.BATTLE_COM_P_STATUSRECOVER end
   if g == 68 then return C.BATTLE_COM_P_REVIVE end
   if g >= 75 and g <= 80 then return C.BATTLE_COM_M_STATUSATTACK end
@@ -150,6 +158,19 @@ local function magicPower(kind, id)
 end
 -- 补血量 ≈ 每级 AR × 等级（单体 60／强力 36／超强 24，未计回复力加成）
 local HEAL_AR = { [61] = 60, [62] = 36, [63] = 24 }
+-- 恢复魔法：6 回合内每回合回 RR（单体每级 20／强力 12／超强 8），这里算 6 回合的总量
+local REGEN_AR = { [64] = 120, [65] = 72, [66] = 48 }
+local REGEN_TURNS = 6
+-- 异常魔法：单体 32～37、强力 38～43、超强 44～49，组内顺序 中毒/昏睡/石化/酒醉/混乱/遗忘；
+-- 优先让敌人停手的：昏睡、石化、混乱、酒醉、遗忘、中毒
+local STATUS_ORDER = { 1, 2, 4, 3, 5, 0 }
+-- 成功率（技能表 SR，依等级）：单体约 35～55%、强力 15～35%、超强 15～27%
+local function statusRate(kind, id)
+  local lv = id % 100
+  if kind == 'single' then return 0.35 + lv * 0.022 end
+  if kind == 'area' then return 0.15 + lv * 0.022 end
+  return 0.15 + lv * 0.013
+end
 
 local function ailing(idx)
   return Char.GetData(idx, CONST.对象_Sleep) > 0 or Char.GetData(idx, CONST.对象_Stone) > 0
@@ -174,7 +195,8 @@ local function view(b, side)
       elseif not dead then
         local asleep = Char.GetData(idx, CONST.对象_Sleep) > 0 or Char.GetData(idx, CONST.对象_Stone) > 0
         local hp = Char.GetData(idx, CONST.对象_血) / math.max(1, Char.GetData(idx, CONST.对象_最大血))
-        table.insert(v.enemies, { slot = slot, idx = idx, asleep = asleep, hp = hp }) -- 血条比例，不看数值
+        local ailed = ailing(idx) or Char.GetData(idx, CONST.对象_Poison) > 0 -- 异常状态图示
+        table.insert(v.enemies, { slot = slot, idx = idx, asleep = asleep, hp = hp, ailing = ailed }) -- 血条比例，不看数值
       end
     end
   end
@@ -202,6 +224,33 @@ local function pickTarget(b, v)
   return e
 end
 
+-- 背包里战斗中能用的回血药（参数 LPxxx；回魔的料理／食物战斗中不能用）：{{slot, lp}...}，扣掉本回合已排定要用的
+local function potions(idx)
+  local list = {}
+  for slot = 8, 27 do
+    local it = Char.GetItemIndex(idx, slot)
+    if it >= 0 and Item.GetData(it, CONST.道具_战斗可用) == 1 then
+      local lp = tonumber(string.match(Item.GetData(it, CONST.道具_自用参数) or '', '^LP(%d+)$'))
+      local left = math.max(1, Item.GetData(it, CONST.道具_堆叠数)) - (planned['i' .. idx .. ':' .. slot] or 0)
+      if lp and left > 0 then table.insert(list, { slot = slot, lp = lp }) end
+    end
+  end
+  return list
+end
+
+-- 本回合还会补血的队友（还没下指令、魔力付得起补血）能补几个人：会强力／超强补血的算全部
+local function healCapacity(b, actor, v)
+  local n = 0
+  for _, u in ipairs(v.allies) do
+    if u.person and not u.dead and u.idx ~= actor and not acted[u.idx] then
+      local t = playerTechs(u.idx)
+      if t[62] or t[63] then return math.huge end
+      if t[61] then n = n + 1 end
+    end
+  end
+  return n
+end
+
 ---@return number com, number target, number techId, string 说明
 local function decide(b, actor, techs, v, side)
   local allyAll, enemyAll = 40 + side, 41 - side
@@ -221,7 +270,7 @@ local function decide(b, actor, techs, v, side)
   end
 
   -- 0. 打不过就逃（Boss 战不能逃）；宠物不能逃，改防御
-  if Battle.GetType(b) ~= CONST.战斗_BOSS战 and losing(observe(b, side, v)) then
+  if not noEscape[b] and Battle.GetType(b) ~= CONST.战斗_BOSS战 and losing(observe(b, side, v)) then
     if me and me.person then
       return C.BATTLE_COM_ESCAPE, -1, -1, '逃跑'
     end
@@ -238,7 +287,7 @@ local function decide(b, actor, techs, v, side)
     end
   end
 
-  -- 2. 补血：人物低于 50%、宠物低于 35% 才补，先顾人物；3 个以上用超强，2 个用强力，1 个用单体
+  -- 2. 补血：人物低于 50%、宠物低于 35% 才补，先顾人物
   local low, lowest = {}, nil
   for _, u in ipairs(v.allies) do
     if not u.dead and not planned[u.slot] and u.hp < (u.person and 0.5 or 0.35) then
@@ -248,47 +297,77 @@ local function decide(b, actor, techs, v, side)
       end
     end
   end
-  if lowest then
-    -- 单体／强力／超强各自挑「补得满最缺的那个」的最低等级（不超过付得起的等级），
-    -- 比实际补到的总量（每人最多补到满），同量取魔力便宜的
-    local need = {}
-    for _, u in ipairs(low) do need[u.slot] = u.miss end
+  -- 补血／恢复魔法共用：单体／强力／超强各自挑「补得满最缺的那个」的最低等级（不超过付得起的等级），
+  -- 比实际补到的总量（每人最多补到满），同量取魔力便宜的。base = 61（补血）或 64（恢复）
+  local function bestHeal(base, rate, need, first, labels)
     local function option(g, label, tgt, slots)
       local maxLv, worst = techs[g] % 100 + 1, 0
       for _, s in ipairs(slots) do worst = math.max(worst, need[s]) end
-      local lv = math.min(maxLv, math.max(1, math.ceil(worst / HEAL_AR[g])))
+      local lv = math.min(maxLv, math.max(1, math.ceil(worst / rate[g])))
       local amount = 0
-      for _, s in ipairs(slots) do amount = amount + math.min(need[s], HEAL_AR[g] * lv) end
+      for _, s in ipairs(slots) do amount = amount + math.min(need[s], rate[g] * lv) end
       local id = g * 100 + lv - 1
       return { amount, Char.CalcConsumeFp(actor, id), comOf(g), tgt, id, label, slots }
     end
     local options = {}
-    if techs[61] then
-      table.insert(options, option(61, '补血', lowest.slot, { lowest.slot }))
+    if techs[base] then
+      table.insert(options, option(base, labels[1], first.slot, { first.slot }))
     end
-    if techs[62] then
+    if techs[base + 1] then
       for _, u in ipairs(v.allies) do
         if not u.dead then
           local cover = {}
           for _, s in ipairs(area(u.slot)) do
             if need[s] then table.insert(cover, s) end
           end
-          if #cover > 0 then table.insert(options, option(62, '强力补血', u.slot + 20, cover)) end
+          if #cover > 0 then table.insert(options, option(base + 1, labels[2], u.slot + 20, cover)) end
         end
       end
     end
-    if techs[63] then
+    if techs[base + 2] then
       local all = {}
-      for _, u in ipairs(low) do table.insert(all, u.slot) end
-      table.insert(options, option(63, '超强补血', allyAll, all))
+      for _, u in ipairs(v.allies) do
+        if need[u.slot] then table.insert(all, u.slot) end
+      end
+      table.insert(options, option(base + 2, labels[3], allyAll, all))
     end
     local pick
     for _, o in ipairs(options) do
       if not pick or o[1] > pick[1] or (o[1] == pick[1] and o[2] < pick[2]) then pick = o end
     end
+    return pick
+  end
+
+  if lowest then
+    local need = {}
+    for _, u in ipairs(low) do need[u.slot] = u.miss end
+    local pick = bestHeal(61, HEAL_AR, need, lowest, { '补血', '强力补血', '超强补血' })
     if pick then
       for _, s in ipairs(pick[7]) do planned[s] = true end
       return pick[3], pick[4], pick[5], pick[6]
+    end
+  end
+
+  -- 2b. 道具补血：补师没魔（或没有补师）、或同时残血的人多过补师补得到的，才用回血药。
+  -- 补师会先补最危险的，所以药留给排在补师能力之后的那个；挑补得满的最小瓶，不够就用最大瓶
+  if lowest and me and me.person then
+    local queue = {}
+    for _, u in ipairs(low) do table.insert(queue, u) end
+    table.sort(queue, function(x, y)
+      if x.person ~= y.person then return x.person end
+      return x.hp < y.hp
+    end)
+    local u = queue[healCapacity(b, actor, v) + 1]
+    local bottles = u and potions(actor) or {}
+    local pick
+    for _, p in ipairs(bottles) do
+      if not pick or (pick.lp < u.miss and p.lp > pick.lp) or (p.lp >= u.miss and p.lp < pick.lp) then pick = p end
+    end
+    if pick then
+      planned[u.slot] = true
+      local key = 'i' .. actor .. ':' .. pick.slot
+      planned[key] = (planned[key] or 0) + 1
+      return C.BATTLE_COM_ITEM, u.slot, pick.slot, '道具补血'
     end
   end
 
@@ -324,15 +403,92 @@ local function decide(b, actor, techs, v, side)
     return C.BATTLE_COM_GUARD, -1, -1, '防御'
   end
 
-  -- 5. 攻击：敌人 3 只以上优先全体／范围，否则单体技能，都不行就普通攻击
-  local target = pickTarget(b, v)
-  -- 魔法：单体／强力（挑涵盖最多敌人的中心）／超强，比「该等级的威力 × 打到隻数」；
-  -- 敌人血量看不到，所以只比总威力。范围魔法赢过单体魔法（没有就以单体 LV1 为准）才用
+  -- 5. 护卫：替血少（<50%）的队友（人物）挡，挑最少血的；自己血量要够（>=70%）才护
+  if techs[7] and me and me.hp >= 0.7 then
+    local weak
+    for _, u in ipairs(v.allies) do
+      if u.person and not u.dead and u.idx ~= actor and u.hp < 0.5 and not planned['g' .. u.slot]
+          and (not weak or u.hp < weak.hp) then
+        weak = u
+      end
+    end
+    if weak then
+      planned['g' .. weak.slot] = true
+      return comOf(7), weak.slot, techs[7], '护卫'
+    end
+  end
+
+  -- 6. 恢复魔法：还不用急补（50%）但低于 80%、身上没有恢复效果的队友，先挂上持续回复
+  if techs[64] or techs[65] or techs[66] then
+    history[b] = history[b] or {}
+    local regen = history[b].regen or {}
+    history[b].regen = regen
+    local turn = Battle.GetTurn(b)
+    local need, first = {}, nil
+    for _, u in ipairs(v.allies) do
+      if not u.dead and not planned[u.slot] and u.hp < 0.8 and (regen[u.slot] or -1) < turn then
+        need[u.slot] = u.miss
+        if not first or u.hp < first.hp then first = u end
+      end
+    end
+    local pick = first and bestHeal(64, REGEN_AR, need, first, { '恢复魔法', '强力恢复魔法', '超强恢复魔法' })
+    if pick then
+      for _, s in ipairs(pick[7]) do
+        planned[s], regen[s] = true, turn + REGEN_TURNS - 1
+      end
+      return pick[3], pick[4], pick[5], pick[6]
+    end
+  end
+
   local alive, enemySlots = {}, {}
   for _, e in ipairs(v.enemies) do
     alive[e.slot] = true
     table.insert(enemySlots, e.slot)
   end
+
+  -- 7. 异常魔法：还没中异常的敌人 2 只以上才放；单体／强力／超强比「成功率 × 可能中招隻数」
+  local fresh, freshSlots = {}, {}
+  for _, e in ipairs(v.enemies) do
+    if not e.ailing and not planned['s' .. e.slot] then
+      fresh[e.slot] = true
+      table.insert(freshSlots, e.slot)
+    end
+  end
+  if #freshSlots >= 2 then
+    local function firstOf(base)
+      for _, o in ipairs(STATUS_ORDER) do
+        if affordable(base + o) then return base + o end
+      end
+    end
+    local opts = {}
+    local g = firstOf(32)
+    if g then
+      local e = freshSlots[math.random(1, #freshSlots)]
+      table.insert(opts, { statusRate('single', techs[g]), g, e, { e }, '异常魔法' })
+    end
+    g = firstOf(38)
+    if g then
+      local c, cover = bestCenter(enemySlots, fresh)
+      if c then table.insert(opts, { statusRate('area', techs[g]) * #cover, g, c + 20, cover, '强力异常魔法' }) end
+    end
+    g = firstOf(44)
+    if g then
+      table.insert(opts, { statusRate('all', techs[g]) * #freshSlots, g, enemyAll, freshSlots, '超强异常魔法' })
+    end
+    local best
+    for _, o in ipairs(opts) do
+      if not best or o[1] > best[1] then best = o end
+    end
+    if best then
+      for _, slot in ipairs(best[4]) do planned['s' .. slot] = true end
+      return comOf(best[2]), best[3], techs[best[2]], best[5]
+    end
+  end
+
+  -- 8. 攻击：敌人 3 只以上优先全体／范围，否则单体技能，都不行就普通攻击
+  local target = pickTarget(b, v)
+  -- 魔法：单体／强力（挑涵盖最多敌人的中心）／超强，比「该等级的威力 × 打到隻数」；
+  -- 敌人血量看不到，所以只比总威力。范围魔法赢过单体魔法（没有就以单体 LV1 为准）才用
   local pick
   local function consider(score, com, tgt, id, label)
     if not pick or score > pick[1] + 1e-9 then pick = { score, com, tgt, id, label } end
@@ -380,8 +536,9 @@ function Module:act(b, actor, techs, side)
   else
     com, target, id, label = decide(b, actor, techs, view(b, side), side)
   end
-  Battle.ActionSelect(actor, com, target, id) -- 回传值实测成功也是 0，不检查
-  if id >= 0 then
+  Battle.ActionSelect(actor, com, target, id) -- 回传值实测成功也是 0，不检查；用道具时 id 是背包位置
+  acted[actor] = true
+  if id >= 0 and com ~= CONST.BATTLE_COM.BATTLE_COM_ITEM then
     spent[actor] = (spent[actor] or 0) + Char.CalcConsumeFp(actor, id)
   end
   self:logInfo('act', 'b=', b, Char.GetData(actor, CONST.对象_名字), label, com, target, id,
@@ -437,7 +594,7 @@ function Module:onAutoBattle(b, p)
 end
 
 function Module:onBattleOver(b)
-  focus[b], turnState[b], history[b] = nil, nil, nil
+  focus[b], turnState[b], history[b], noEscape[b] = nil, nil, nil, nil
 end
 
 function Module:onTalk(player, msg)
@@ -453,6 +610,10 @@ end
 --- 测试模块用：让假人也由本模块指挥
 function Module:setEnabled(charIndex, on)
   enabled[charIndex] = on or nil
+end
+
+function Module:setNoEscape(battleIndex, on)
+  noEscape[battleIndex] = on or nil
 end
 
 function Module:onLoad()
