@@ -31,7 +31,9 @@
 ## 無頭角色（botlogin）＝扮演遊戲端
 
 - 協定是明文：`指令 參數… ` 加 `\n`。`cg_protocol_notes.md` 的 xgmsv 加密不適用。
-- 引擎在等遊戲端的事，bot 都要自己做，否則會卡住：每回合回兩次 `Rg N`（人物、寵物各一），戰鬥結束 `LYIm C|20` 後回 `eL 0`。新流程先對照封包記錄裡真遊戲端的行為。
+- 引擎在等遊戲端的事，bot 都要自己做，否則會卡住：每回合回兩次 `Rg N`（人物、寵物各一），戰鬥結束 `LYIm C|20` 後回 `eL 0`；每 60 秒送 `DE`（引擎稱 FC，進遊戲 5 分鐘沒收到就踢；送太勤會被判加速外掛；`setup.cf` 的 `fctime`／`fccount`／`fcwait`／`unfairuserdown` 控制，已設 `unfairuserdown=0` 只記錄不踢）。定期送的封包，間隔要照真遊戲端。
+- 引擎設定分兩檔：`cgmsv.cf`（遊戲規則）與 `setup.cf`（連線、檢查、資源上限）。找設定時兩檔都看；鍵名找不到時，從 `cgmsv.exe` 引用的設定結構位移對回鍵名的順序。新流程先對照封包記錄裡真遊戲端的行為。
+- 引擎同時建多個角色會撞 SQLite 鎖，回 `DZ failed -1`（botlogin 自動重試）。同一 IP 的連線數受 `cgmsv.cf` 的 `loginnum` 限制（已改 0＝不限）。
 - `AutoBattleCommandEvent` 要等遊戲端送了 `Rg` 才會觸發。`Battle.ActionSelect` 對有連線的玩家無效（`IsWaitingCommand`＝0）。
 - `Char.SetDummy` 不能用：無法存檔，自動戰鬥也不出招。
 

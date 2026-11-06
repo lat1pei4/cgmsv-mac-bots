@@ -8,7 +8,7 @@
 | [battle_nlg_map.md](battle_nlg_map.md) | Battle 46／NLG 51／NL 118／Obj 31／Map 19／Field 2 |
 | [misc_events.md](misc_events.md) | Data、Protocol、Recipe、Skill、Stall、Tech、TechArea、Guild、SQL、Cron、Setup、Http、Func、BattleCommands、BT（共 96），以及全部事件（93＋補充 16） |
 | `apidump.txt` | 執行期匯出的原始清單 |
-| `upstream/` | 上游 Muscipular/cgmsv-lua 的 `docs/*.lua`（24.x 時代的 EmmyLua 文件，battle_nlg_map.md 引用的「上游」） |
+| `upstream/` | 上游 Muscipular/cgmsv-lua 的 `docs/`（EmmyLua 文件，battle_nlg_map.md 引用的「上游」）。2026-11-06 同步到 commit `aa1c2e5`（2026-11-03），原檔 GBK 已轉 UTF-8。**上游可能有 26.8d 沒有的函式**（例：`Protocol.OnSend`，26.8d 的 `apidump.txt` 沒有）；以 `apidump.txt` 為準 |
 
 ## 資料來源與可信度
 

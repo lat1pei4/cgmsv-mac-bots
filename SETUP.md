@@ -65,6 +65,7 @@ crossgate/
 - `run-game.sh` 在有 `CG_SPEED` 時才複製 DLL 並設 `WINEDLLOVERRIDES=winmm=n,b`；沒設時 Wine 用內建 winmm
 - 重新編譯：`tools/speed/build.sh`（用 scratchpad venv 裡的 `ziglang`，venv 不在 repo 裡，消失時重建：`python3 -m venv v && v/bin/pip install ziglang`）
 - 伺服器端已關反作弊（`anitcheatingflg=0`、`highspeedblock=0`）
+- 遊戲端每 60 秒（遊戲端時鐘）送一個 `DE`，加速後送得更勤，伺服器會判定 `CHEAT!! Client Accelerate 200.00%` 而斷線，這個檢查不受 `anitcheatingflg` 控制。設定在 `setup.cf`（反組譯 `cgmsv.exe` 對出來的）：`fctime=60`（標準間隔）、`fccount=5`（連續提早幾次才判定）、`fcwait=300`（多久沒收到就斷線）、`unfairuserdown`（1＝判定後斷線）。已改 `unfairuserdown=0`，只記錄不斷線，原檔 `setup.cf.bak-unfair`（2026-11-06）
 
 ## 自動戰鬥與測試
 
@@ -94,11 +95,13 @@ crossgate/
 - **角色清單顯示 locked** → 異常關閉留下 `tbl_lock`；`run-start.sh` 會在伺服器沒在跑時清除
 - **新伺服器卡住不載入** → 用 `pkill` 殺掉後，wineserver 還殘留舊程序；一律用 `run-stop.sh`
 - **伺服器偶爾啟動就崩潰**（約 10 次 2 次）：`server-b.log` 開頭 `Unhandled page fault on read access to 0000000000000178 at address 00000001401C877B`，在開機畫面後、載入 Lua 前，引擎本體的工作執行緒。`run-start.sh` 偵測到就 `pkill -f winedbg` 自動重試一次；`run-server.sh` 啟動前把上次的崩潰 log 另存成 `server-b-crash-<時間>.log`，累積幾份再比對是不是每次同一處
-- **bot 建角色偶爾 `DZ failed -1`**：新帳號同時登入 3 個時 2 個失敗、之後單獨重登成功；改成一次只建一個也一樣失敗，根因未明。再按一次登入即可
+- **bot 建角色偶爾 `DZ failed -1`**：引擎同時處理多個建角色時，各自寫 SQLite，搶不到鎖的那個不等待直接失敗（`server-b.log`：`db.cpp query err (database is locked)`、`err:update character`）。只有 bot 會同時建，真遊戲端不會。帳號先寫好 `tbl_user` 也一樣會失敗，所以不是 autoRegister 造成的。botlogin 收到 `DZ failed` 會重新要清單再建，最多 3 次（實測失敗 2 次後第 3 次成功）（2026-11-06）
+- **bot 上線 5 分鐘被踢**：`server-b.log` 出現 `Client not send FC`。進遊戲後 5 分鐘內沒收到 `DE` 就斷線，真遊戲端每 60 秒送一次。botlogin 照樣每 60 秒送；改成 30 秒會被當成加速外掛踢掉（`CHEAT!! Client Accelerate 200.00%`），間隔要和真遊戲端一樣（2026-11-06）
+- **第 6 個 bot 進不了遊戲（`hPUd failed locked`）**：`cgmsv.cf` 的 `loginnum=5` 是同一個 IP 最多 5 個連線，log 會出現 `IP exceeds login limit`，而且帳號會被鎖。bot 全部從 127.0.0.1 連，所以改成 `loginnum=0`（不限），原檔 `cgmsv.cf.bak-loginnum`（2026-11-06）
 
 ## 下一步
 
-- [ ] AI 隊友：傭兵模組（`xmancheng/cgmsv-lua` 的 `heroes` 或 `精简佣兵`）在 26.8d 上能不能用
+- [x] AI 隊友：不做傭兵，改用 bot（真帳號角色會存檔、升級、能分工；傭兵是臨時 NPC，上游也沒有授權條款）（2026-11-06）
 - [ ] 只讓自己登入：組好隊後拿掉 `autoRegister`
 - [x] http 模組改成只聽 `127.0.0.1`（2026-11-06，bot 管理 API 不對區網開放）
 - [x] 關閉反作弊：`cgmsv.cf` 的 `anitcheatingflg=0`、`highspeedblock=0`（2026-11-06，原檔 `cgmsv.cf.bak-20261106`），為遊戲端加速做準備
