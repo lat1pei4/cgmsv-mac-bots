@@ -1,0 +1,823 @@
+== (global function) AutoBattleCommandEvent
+== BT functions=2 others=0
+  createTree@lua/libs/BehaviorTree.lua:21
+  reInitProcess@lua/libs/BehaviorTree.lua:27
+== Battle functions=46 others=0
+  ActionSelect
+  AppendBattleMsg
+  CalcAttributeDmgRate
+  CalcPropScore
+  CalcTribeDmgRate
+  CalcTribeRate
+  Encount
+  ExitBattle
+  GetBattleCharacterStatus
+  GetBattleFieldAttribute
+  GetCurrentBattle
+  GetDexRearrangeRate
+  GetEntryData
+  GetEntryPosition
+  GetExtData
+  GetGainMode
+  GetMaxCounter
+  GetNextBattle
+  GetPlayIndex
+  GetPlayer
+  GetPos
+  GetSlot@lua/libs/Gmsv/BattleEx.lua:49
+  GetTechOption
+  GetTurn
+  GetType
+  GetWinSide
+  IsBossBattle
+  IsWaitingCommand
+  JoinBattle
+  PVE
+  PVP
+  PositionCheck
+  SetBattleCharacterStatus
+  SetBattleFieldAttribute
+  SetDexRearrangeRate
+  SetEntryData
+  SetExtData
+  SetGainMode
+  SetMaxCounter
+  SetNextBattle
+  SetPVPWinEvent
+  SetTurn
+  SetType
+  SetWinEvent
+  UnsetPVPWinEvent
+  UnsetWinEvent
+== BattleCommands functions=2 others=0
+  Attack@lua/libs/Gmsv/BattleEx.lua:33
+  GetTargets@lua/libs/Gmsv/BattleEx.lua:4
+== (global function) BattleOverEvent
+== (global function) BeforeBattleTurnEvent
+== CONST functions=0 others=1588
+== Char functions=126 others=0
+  AddCrystal
+  AddGold
+  AddPet
+  AddSkill
+  Ban
+  CalcConsumeFp
+  CheckTitle
+  CreateDummy
+  DelDummy
+  DelItem
+  DelItemBySlot
+  DelPet
+  DelSkill
+  DelSlotPet
+  DischargeParty
+  DropPet
+  EndEvent
+  FeverStart
+  FeverStop
+  FindItemId
+  GetBagPage
+  GetBattleIndex
+  GetCharPointer
+  GetData
+  GetEmptyItemSlot@lua/libs/Gmsv/CharEx.lua:20
+  GetEmptyPetSlot@lua/libs/Gmsv/CharEx.lua:44
+  GetExtData
+  GetGold
+  GetGuildID
+  GetGuildTitle
+  GetHouseItem
+  GetHousePet
+  GetItemIndex
+  GetItemSlot@lua/libs/Gmsv/CharEx.lua:35
+  GetLevelExp
+  GetMyRoomFloor
+  GetNextExp
+  GetPartyMember
+  GetPet
+  GetPetEnemyId
+  GetPoolItem
+  GetPoolPet
+  GetSkillExp
+  GetSkillID
+  GetSkillId
+  GetSkillLevel
+  GetSkillLv
+  GetSkillSeqNo
+  GetSuitCount
+  GetSuitId
+  GetTempData
+  GetTitle
+  GetTitleBySlot
+  GetTitleIndex
+  GetTitleNameBySlot
+  GetUUID
+  GetWeapon@lua/libs/Gmsv/CharEx.lua:3
+  GiveItem
+  GivePet
+  GlobalEvent
+  GlobalGAEvent
+  GlobalTEvent
+  HaveGuild
+  HaveItem
+  HaveItemID
+  HaveItemPos
+  HavePet
+  HaveSkill
+  IsDummy
+  IsEnemy@lua/libs/Gmsv/CharEx.lua:74
+  IsFeverTime
+  IsNpc@lua/libs/Gmsv/CharEx.lua:83
+  IsPet@lua/libs/Gmsv/CharEx.lua:56
+  IsPlayer@lua/libs/Gmsv/CharEx.lua:65
+  IsValidCharIndex@lua/libs/Gmsv/CharEx.lua:16
+  ItemMoveBag
+  ItemNum
+  ItemSlot
+  JoinParty
+  LeaveParty
+  LevelExp
+  LocalCount
+  LocalEvent
+  MoveArray
+  MoveItem
+  MovePet
+  NowEvent
+  PartyNum
+  PetNum
+  RemovePoolItem
+  SaveToDb
+  SetAutoWalk
+  SetData
+  SetDummy
+  SetExtData
+  SetItemIndex
+  SetItemPutEvent
+  SetLoopEvent
+  SetPetDepartureState
+  SetPetDepartureStateAll
+  SetPoolItem
+  SetPostOverEvent
+  SetSkillAction
+  SetSkillExp
+  SetSkillLevel
+  SetSkillSeqNo
+  SetTalkedEvent
+  SetTempData
+  SetWalkPostEvent
+  SetWalkPreEvent
+  SetWatchEvent
+  SetWindowTalkedEvent
+  SimpleLogout
+  SwitchBag
+  TradeItem
+  TradePet
+  UnsetItemPutEvent
+  UnsetLoopEvent
+  UnsetPostOverEvent
+  UnsetTalkedEvent
+  UnsetWalkPostEvent
+  UnsetWalkPreEvent
+  UnsetWatchEvent
+  UnsetWindowTalkedEvent
+  UpCharStatus
+  Warp
+== Cron functions=4 others=0
+  AddCron
+  AddInterval
+  RemoveTask
+  RunAt
+== Data functions=26 others=0
+  EnemyBaseGetData
+  EnemyBaseGetDataIndex
+  EnemyBaseSetData
+  EnemyGetData
+  EnemyGetDataIndex
+  EnemySetData
+  GetEncountData
+  GetEncountGroupData
+  GetEncountGroupIndex
+  GetEncountIndex
+  GetEnemyBaseIdByEnemyId@lua/libs/Gmsv/DataEx.lua:3
+  GetEnemyBaseIndexByEnemyId@lua/libs/Gmsv/DataEx.lua:15
+  GetJobAncestryData
+  GetJobAncestryIndex
+  GetJobData
+  GetJobIndex
+  GetMessage
+  ItemsetGetData
+  ItemsetGetIndex
+  ItemsetSetData
+  SetEncountData
+  SetEncountGroupData
+  SetJobAncestryData
+  SetJobData
+  SetMessage
+  SetTribeMapValue
+== (global function) DropEvent
+== Field functions=2 others=0
+  Get
+  Set
+== Func functions=1 others=0
+  bind@lua/libs/functions.lua:8
+== (global function) GetLoginPointEvent
+== Guild functions=8 others=0
+  GetBrief
+  GetMember
+  GetName
+  GetRoomName
+  GetRoomType
+  GetServer
+  GetStatus
+  GetTitleName
+== Http functions=9 others=0
+  AddMountPoint
+  GetStatus
+  Init
+  RegApi
+  RemoveMountPoint
+  Send
+  Start
+  Stop
+  UnregApi
+== (global function) HttpRequestEvent
+== Iconv functions=2 others=0
+  ToLocale
+  ToUtf8
+== Item functions=28 others=1
+  CreateNewItemType
+  GetCharPointer
+  GetData
+  GetExtData
+  GetItemTypeEquipLevelForJob
+  GetNameFromNumber
+  GetNewItemType
+  GetOwner
+  GetPetEquipPlace
+  GetSlot@lua/libs/Gmsv/ItemEx.lua:1
+  GetTimeLimit@lua/libs/Gmsv/ItemEx.lua:105
+  IsWeaponType
+  Kill
+  MakeItem
+  RemoveCharPointer
+  SetCharPointer
+  SetData
+  SetExtData
+  SetItemTypeEquipLevelForJob
+  SetPetEquipPlace
+  SetTimeLimit@lua/libs/Gmsv/ItemEx.lua:88
+  TohelosIgnoreEnemyLv
+  UnlinkItem
+  UpItem
+  isAccessory@lua/libs/Gmsv/ItemEx.lua:75
+  isArmour@lua/libs/Gmsv/ItemEx.lua:71
+  isCrystal@lua/libs/Gmsv/ItemEx.lua:79
+  isWeapon@lua/libs/Gmsv/ItemEx.lua:67
+== JSON functions=2 others=1
+  decode@lua/libs/three_parts/json.lua:375
+  encode@lua/libs/three_parts/json.lua:134
+== LRU functions=1 others=0
+  new@lua/libs/three_parts/lru.lua:7
+== LegacyModule functions=23 others=7
+  AddCron@lua/libs/Module/Parts/Cron.lua:19
+  AddInterval@lua/libs/Module/Parts/Cron.lua:47
+  Chara@lua/libs/Module/Parts/Char.lua:97
+  NPC_CreateCo@lua/libs/Module/Parts/Npc.lua:225
+  NPC_buildBuyWindowData@lua/libs/Module/Parts/Npc.lua:125
+  NPC_buildSelectionText@lua/libs/Module/Parts/Npc.lua:158
+  NPC_createArgNpc@lua/libs/Module/Parts/Npc.lua:82
+  NPC_createNormal@lua/libs/Module/Parts/Npc.lua:96
+  NPC_createShop@lua/libs/Module/Parts/Npc.lua:23
+  NPC_createShopCrystal@lua/libs/Module/Parts/Npc.lua:50
+  NPC_regTalkedEvent@lua/libs/Module/Parts/Npc.lua:137
+  NPC_regWindowTalkedEvent@lua/libs/Module/Parts/Npc.lua:149
+  RemoveTask@lua/libs/Module/Parts/Cron.lua:66
+  RunAt@lua/libs/Module/Parts/Cron.lua:57
+  callInCtx@lua/libs/Module/LegacyModule.lua:49
+  createContext@lua/libs/Module/LegacyModule.lua:169
+  createDelegate@lua/libs/Module/LegacyModule.lua:123
+  loadFile@lua/libs/Module/LegacyModule.lua:31
+  new@lua/libs/Module/LegacyModule.lua:111
+  onLoad@lua/libs/Module/LegacyModule.lua:200
+  onUnload@lua/libs/Module/LegacyModule.lua:214
+  parseFile@lua/libs/Module/Parts/Assets.lua:19
+  readConfigFile@lua/libs/Module/Parts/Assets.lua:4
+== (global function) LogoutEvent
+== MT functions=2 others=0
+  random
+  seed
+== MT19937 functions=2 others=0
+  random
+  seed
+== Map functions=19 others=0
+  DelLuaMap
+  FindDungeonEntry
+  GetAvailablePos
+  GetDungeonExpireAt@[string "function NL.newEvent(event, defaultRet)..."]:54
+  GetDungeonExpireAtByDungeonId
+  GetDungeonExpireTime@[string "function NL.newEvent(event, defaultRet)..."]:34
+  GetDungeonExpireTimeByDungeonId@[string "function NL.newEvent(event, defaultRet)..."]:22
+  GetDungeonId
+  GetExtData
+  GetImage
+  GetMapSize
+  IsWalkable
+  MakeCopyMap
+  MakeMazeMap
+  SetDungeonExpireAt@[string "function NL.newEvent(event, defaultRet)..."]:46
+  SetDungeonExpireAtByDungeonId
+  SetExtData
+  SetImage
+  SetWalkable
+== ModuleBase functions=22 others=6
+  SetLogLevel@lua/libs/Module/ModuleBase.lua:22
+  addMigration@lua/libs/Module/ModuleBase.lua:92
+  createModule@lua/libs/Module/ModuleBase.lua:46
+  createPart@lua/libs/Module/ModuleBase.lua:76
+  load@lua/libs/Module/ModuleBase.lua:226
+  log@lua/libs/Module/ModuleBase.lua:166
+  logDebug@lua/libs/Module/ModuleBase.lua:178
+  logDebugF@lua/libs/Module/ModuleBase.lua:208
+  logError@lua/libs/Module/ModuleBase.lua:190
+  logErrorF@lua/libs/Module/ModuleBase.lua:220
+  logF@lua/libs/Module/ModuleBase.lua:196
+  logInfo@lua/libs/Module/ModuleBase.lua:172
+  logInfoF@lua/libs/Module/ModuleBase.lua:202
+  logWarn@lua/libs/Module/ModuleBase.lua:184
+  logWarnF@lua/libs/Module/ModuleBase.lua:214
+  migrate@lua/libs/Module/ModuleBase.lua:140
+  new@lua/libs/Module/ModuleBase.lua:34
+  onLoad@lua/libs/Module/ModuleBase.lua:245
+  onUnload@lua/libs/Module/ModuleBase.lua:249
+  regCallback@lua/libs/Module/ModuleBase.lua:108
+  unRegCallback@lua/libs/Module/ModuleBase.lua:122
+  unload@lua/libs/Module/ModuleBase.lua:234
+== NL functions=118 others=0
+  CreateArgNpc
+  CreateNpc
+  DelArgNpc
+  DelNpc
+  GetErrorStr
+  PrintError
+  RegAfterBattleTurnEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegAfterCalcCharaBpEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegAfterCalcCharaStatusEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegAfterWarpEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegAutoBattleCommandEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleActionEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleActionTargetEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleAfterActionEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleBeforeActionEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleCalcDexEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleCounterRateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleDodgeRateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleEscapeEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleExitEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleGetProfitEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleHealCalculateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleInjuryEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleLuaSkillEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleMagicDamageRateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleMagicRssRateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleNextEnemyEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleNextEnemyInitEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleOverEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattlePetLeaveCheckEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattlePreEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleSealRateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleSkillCheckEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleSkillExpEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleStartEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleStatusReflectionEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleStatusResistanceEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleSummonEnemyEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleSummonedEnemyEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBattleSurpriseEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBeforeBattleTurnEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBeforeBattleTurnStartEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegBeforeCharaSaveEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegCalcCriticalRateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegCalcFpConsumeEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegCallback
+  RegCharActionEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegCharaDeletedEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegCharaSavedEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegCharaStallBrowseEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegCharaStallEndEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegCharaStallSoldEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegCharaStallStartEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegCheckDummyDollEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegDamageCalculateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegDropEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegEnemyCommandEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegGatherItemEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegGatherTechUsedEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegGetExpEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegGetLevelExpEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegGetLoginPointEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegHeadCoverEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegHttpRequestEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegHttpResultEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegInit@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemAttachEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemBoxEncountEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemBoxEncountRateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemBoxGenerateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemBoxLootEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemConsumeEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemDetachEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemDropEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemDropRateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemDurabilityChangedEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemExpansionEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemInitEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemOverLapEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemPickUpEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegItemString
+  RegItemUseEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegJudgeItemEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegLevelUpEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegLoginEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegLoginGateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegLogoutEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegMergeItemEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegPartyEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegPetDropEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegPetFieldEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegPetLevelUpEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegPetPickUpEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegPetTimeDeleteEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegPreItemDropEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegPreItemPickUpEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegProductSkillExpEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegRankUpEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegRepairItemEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegResetCharaBattleStateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegRightClickEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegScriptCallEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegSealEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegShutDownEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegStatusCalcEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegStealItemEmitRateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegTalkEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegTechOptionEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegTitleChangedEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegTitleCheckCallEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegTribeRateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegVSEnemyCreateEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RegWarpEvent@[string "function NL.newEvent(event, defaultRet)..."]:2
+  RemoveCallback
+  SetArgNpc
+  Ver
+  Version
+  newEvent@[string "function NL.newEvent(event, defaultRet)..."]:1
+== NLG functions=51 others=0
+  CanTalk
+  ChangePal
+  CharLook
+  CheckInFront
+  CheckTalkRange
+  DeleteCharacter
+  DropPlayer
+  Effect
+  FindUser
+  GetArgNpc
+  GetDungeonLimit
+  GetGameTime
+  GetIp
+  GetMac
+  GetMapName
+  GetMapPlayer
+  GetMapPlayerNum
+  GetOnLinePlayer
+  GetPlayer
+  GetPlayerNum
+  LowCpuUsage
+  OpenBank
+  PlaySe
+  RaiseCrash
+  Rand
+  Say
+  Say2Map
+  SetAction
+  SetCriticalDamageAddition
+  SetDexRearrangeRate
+  SetHeadIcon
+  SetMapName
+  SetObj
+  SetPal
+  SetPetRandomShot
+  SetTribeRate
+  ShowTalked
+  ShowWindowTalked
+  SortItem
+  SystemMessage
+  SystemMessageToMap
+  TalkToCli
+  TalkToFloor
+  TalkToMap
+  UpChar
+  UpdateParty
+  WalkMove
+  Walkable
+  WatchBattle
+  WatchEntry
+  c
+== Obj functions=31 others=0
+  AddGold
+  AddItem
+  AddWarp
+  GetCharIndex
+  GetDelTime
+  GetFloor
+  GetMap
+  GetMapId
+  GetObject
+  GetType
+  GetWarpFloor
+  GetWarpMap
+  GetWarpMapId
+  GetWarpX
+  GetWarpY
+  GetX
+  GetY
+  RemoveObject
+  SetDelTime
+  SetFloor
+  SetMap
+  SetMapId
+  SetType
+  SetWarpFloor
+  SetWarpMap
+  SetWarpMapId
+  SetWarpX
+  SetWarpY
+  SetX
+  SetY
+  UpObject
+== (global function) OrderedCallback
+== Pet functions=12 others=0
+  AddSkill
+  DelSkill
+  FullArtRank
+  GetArtRank
+  GetOwner
+  GetSkill
+  GetUUID@lua/libs/Gmsv/Pet.lua:3
+  MoveItem
+  ReBirth
+  SetArtRank
+  SetUUID
+  UpPet
+== Protocol functions=12 others=0
+  FlushBuffer
+  GetCharByFd
+  GetCharIndexFromFd
+  GetFdByCharIndex
+  GetIp
+  OnRecv
+  Send
+  SendToFd
+  makeEscapeString
+  makeStringFromEscaped
+  nrprotoEscapeString
+  nrprotoUnescapeString
+== (global function) ProtocolOnRecvJFVf
+== Recipe functions=5 others=0
+  GetData
+  GiveRecipe
+  HasRecipe
+  RemoveRecipe
+  SetData
+== (global function) ResetCharaBattleStateEvent
+== SQL functions=6 others=1
+  GetConn
+  Query
+  QueryEx
+  Run
+  querySQL@lua/libs/sql.lua:27
+  sqlValue@lua/libs/sql.lua:4
+== Setup functions=2 others=0
+  GetJobFameLimit
+  SetJobFameLimit
+== (global function) ShutDownEvent
+== Skill functions=5 others=0
+  CheckInGroup
+  GetData
+  GetMaxSkillLevelOfJob
+  GetSkillIndex
+  SetData
+== Stall functions=6 others=0
+  BuyItem
+  BuyPet
+  End
+  GetItemPrice
+  GetPetPrice
+  Start
+== (global function) TalkEvent
+== Tech functions=3 others=0
+  GetData
+  GetTechIndex
+  SetData
+== TechArea functions=5 others=0
+  CreateTechArea
+  GetData
+  GetIndexList
+  RemoveTechArea
+  SetData
+== (global function) adminCommands_WalkPostEvent
+== (global function) assert
+== bit functions=12 others=0
+  arshift
+  band
+  bnot
+  bor
+  bswap
+  bxor
+  lshift
+  rol
+  ror
+  rshift
+  tobit
+  tohex
+== (global function) collectgarbage
+== coroutine functions=7 others=0
+  create
+  isyieldable
+  resume
+  running
+  status
+  wrap
+  yield
+== debug functions=16 others=0
+  debug
+  getfenv
+  gethook
+  getinfo
+  getlocal
+  getmetatable
+  getregistry
+  getupvalue
+  setfenv
+  sethook
+  setlocal
+  setmetatable
+  setupvalue
+  traceback
+  upvalueid
+  upvaluejoin
+== (global function) dofile
+== (global function) error
+== (global function) findLegacyModuleName
+== fs functions=1 others=0
+  parseFile@lua/libs/file.lua:3
+== (global function) gcinfo
+== (global function) getModule
+== (global function) getfenv
+== (global function) getmetatable
+== io functions=11 others=3
+  close
+  flush
+  input
+  lines
+  open
+  output
+  popen
+  read
+  tmpfile
+  type
+  write
+== (global function) ipairs
+== jit functions=6 others=5
+  attach
+  flush
+  off
+  on
+  security
+  status
+== (global function) load
+== (global function) loadModule
+== (global function) loadSimpleModule
+== (global function) loadfile
+== (global function) loadstring
+== (global function) log
+== (global function) logDebug
+== (global function) logError
+== (global function) logInfo
+== (global function) logWarn
+== math functions=30 others=2
+  abs
+  acos
+  asin
+  atan
+  atan2
+  ceil
+  cos
+  cosh
+  deg@[builtin:deg]:-1
+  div
+  exp
+  floor
+  fmod
+  frexp
+  ldexp
+  log
+  log10
+  max
+  min
+  mod
+  modf
+  pow
+  rad@[builtin:rad]:-1
+  random
+  randomseed
+  sin
+  sinh
+  sqrt
+  tan
+  tanh
+== (global function) module
+== (global function) moduleInitial
+== (global function) newMigration
+== (global function) newproxy
+== (global function) next
+== os functions=11 others=0
+  clock
+  date
+  difftime
+  execute
+  exit
+  getenv
+  remove
+  rename
+  setlocale
+  time
+  tmpname
+== (global function) pairs
+== (global function) pcall
+== (global function) print
+== (global function) rawequal
+== (global function) rawget
+== (global function) rawset
+== (global function) regGlobalEvent
+== (global function) reloadModule
+== (global function) removeGlobalEvent
+== (global function) require
+== (global function) select
+== (global function) setfenv
+== (global function) setmetatable
+== string functions=17 others=0
+  byte
+  char
+  decodeNumber@lua/libs/string.lua:36
+  dump
+  find
+  format
+  formatNumber@lua/libs/string.lua:10
+  gmatch
+  gsub
+  len@[builtin:len]:-1
+  lower
+  match
+  rep
+  reverse
+  split@lua/libs/string.lua:46
+  sub
+  upper
+== table functions=28 others=0
+  combine@lua/libs/table.lua:65
+  concat
+  copy@lua/libs/table.lua:103
+  fill@lua/libs/table.lua:46
+  filter@lua/libs/table.lua:53
+  find@lua/libs/table.lua:19
+  findIndex@lua/libs/table.lua:10
+  forEach@lua/libs/table.lua:89
+  foreach@[builtin:foreach]:-1
+  foreachi@[builtin:foreachi]:-1
+  getn@[builtin:getn]:-1
+  indexOf@lua/libs/table.lua:80
+  insert
+  isEmpty@lua/libs/table.lua:1
+  join
+  keys@lua/libs/table.lua:28
+  map@lua/libs/table.lua:95
+  maxn
+  move@[builtin:move]:-1
+  pack@lua/libs/table.lua:129
+  range@lua/libs/table.lua:111
+  reduce@lua/libs/table.lua:133
+  remove@[builtin:remove]:-1
+  slice@lua/libs/table.lua:124
+  sort
+  unpack
+  values@lua/libs/table.lua:36
+  where@lua/libs/table.lua:53
+== (global function) tonumber
+== (global function) tonumberEx
+== (global function) tostring
+== (global function) type
+== (global function) unloadModule
+== (global function) unpack
+== (global function) useModule
+== (global function) xpcall

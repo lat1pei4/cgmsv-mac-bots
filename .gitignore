@@ -3,6 +3,7 @@
 !/.gitignore
 !/SETUP.md
 !/cg_protocol_notes.md
+!/docs/
 
 !/tools/
 /tools/*
