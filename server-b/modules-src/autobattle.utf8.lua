@@ -1,5 +1,5 @@
 ---自动战斗：玩家说 /auto 切换引擎的自动战斗开关，引擎要指令时（AutoBattleCommandEvent）由本模块出招。
----假人（测试用）则在 BeforeBattleTurnEvent 出招。只用玩家画面上看得到的信息判断：
+---假人（测试用）则在 BeforeBattleTurnEvent 出招。补给用完时战斗后自动回东医（见 onLeaveBattle）。只用玩家画面上看得到的信息判断：
 ---我方：血量、魔条比例、倒下、异常状态；敌方：位置、血条比例、是否倒下、异常状态图示。
 ---不读敌方血量数值／能力值／下一步行动。
 local Module = ModuleBase:createModule('autobattle')
@@ -616,17 +616,63 @@ function Module:setNoEscape(battleIndex, on)
   noEscape[battleIndex] = on or nil
 end
 
-function Module:onLoad()
-  local coms = {}
-  for k, val in pairs(CONST.BATTLE_COM) do
-    table.insert(coms, k .. '=' .. tostring(val))
+-- 回东医：开 /auto 的玩家（队长或单人）离开战斗后，若「有人血不到一半、没人会补血、也没有回血药」
+-- 或「全队魔力剩不到 10%」，整队传送到法兰城东门医院（地图 1112，进门的位置）并补满血魔
+local HOSPITAL = { map = 1112, x = 12, y = 42 }
+
+local function partyOf(c)
+  local leader = Char.GetPartyMember(c, 0)
+  if leader < 0 then return { c } end -- 没组队
+  if leader ~= c then return nil end  -- 由队长判断，队员不重复
+  local list = {}
+  for i = 0, 4 do
+    local m = Char.GetPartyMember(c, i)
+    if m >= 0 then table.insert(list, m) end
   end
-  table.sort(coms)
-  self:logInfo('load', 'BATTLE_COM:', table.concat(coms, ' ')) -- 查「使用道具」指令用
+  return list
+end
+
+local function exhausted(members)
+  spent, planned = {}, {} -- 战斗外：没有本回合预定的魔力和药
+  local low, canHeal, hasPotion, mp, maxMp = false, false, false, 0, 0
+  for _, c in ipairs(members) do
+    if Char.GetData(c, CONST.对象_血) < Char.GetData(c, CONST.对象_最大血) * 0.5 then low = true end
+    local t = playerTechs(c)
+    if t[61] or t[62] or t[63] then canHeal = true end
+    if #potions(c) > 0 then hasPotion = true end
+    mp, maxMp = mp + Char.GetData(c, CONST.对象_魔), maxMp + Char.GetData(c, CONST.对象_最大魔)
+  end
+  return (low and not canHeal and not hasPotion) or mp < maxMp * 0.1
+end
+
+function Module:onLeaveBattle(c)
+  if Char.GetData(c, CONST.对象_自动战斗开关) ~= 1 then return 0 end
+  local members = partyOf(c)
+  if not members or not exhausted(members) then return 0 end
+  Cron.RunAt(os.time() + 1, function() -- 等引擎把战斗状态清完再传送
+    Char.Warp(c, 0, HOSPITAL.map, HOSPITAL.x, HOSPITAL.y) -- 传队长，队员会跟着
+    for _, m in ipairs(members) do
+      for _, u in ipairs({ m, Char.GetPet(m, 0), Char.GetPet(m, 1), Char.GetPet(m, 2), Char.GetPet(m, 3), Char.GetPet(m, 4) }) do
+        if u >= 0 then
+          Char.SetData(u, CONST.对象_血, Char.GetData(u, CONST.对象_最大血))
+          Char.SetData(u, CONST.对象_魔, Char.GetData(u, CONST.对象_最大魔))
+        end
+      end
+      NLG.UpChar(m)
+    end
+    NLG.SystemMessage(c, '[自動戰鬥] 補給用完，已回東醫補滿血魔')
+    self:logInfo('hospital', Char.GetData(c, CONST.对象_名字), #members)
+  end)
+  return 0
+end
+
+function Module:onLoad()
+  self:logInfo('load')
   self:regCallback('BeforeBattleTurnEvent', Func.bind(self.onTurn, self))
   self:regCallback('BattleOverEvent', Func.bind(self.onBattleOver, self))
   self:regCallback('TalkEvent', Func.bind(self.onTalk, self))
   self:regCallback('AutoBattleCommandEvent', Func.bind(self.onAutoBattle, self))
+  self:regCallback('ResetCharaBattleStateEvent', Func.bind(self.onLeaveBattle, self))
 end
 
 function Module:onUnload()
