@@ -218,6 +218,10 @@ local function manualPoints(c) return Char.GetExtData(c, MANUAL_KEY) == '1' end
 
 -- 资料表的名字（Big5 原样）：GM 发的道具／宠物存档后名字是空的（tbl_item TrueName、tbl_pet Name 实测为空），网页显示时用这里补
 local ITEM_NAMES, PET_NAMES = {}, {}
+-- 职业与技能（网页选职业、学技能用；名字是台版 Big5 原始位元组，网页解码）
+local JOB_NAMES, JOB_OF = {}, {} -- [职业 id] = 名字；[职业 id] = { 职类, 职阶 }
+local SKILL_NAMES, SKILL_MAX = {}, {} -- [技能 id] = 名字；[职业 id][技能 id] = 这个职业能学到的最高等级
+local SKILL_EXP = {} -- [经验表编号] = { 第 1 级起点, 第 2 级, … }（data/skillexp.txt；技能用哪张表看 CONST.SKILL_EXPTABLE）
 local function loadNames()
   local function each(path, fn)
     local f = io.open(path, 'r')
@@ -231,6 +235,63 @@ local function loadNames()
   end
   each('data/itemset.txt', function(v) if tonumber(v[12]) and v[2] ~= '' then ITEM_NAMES[tonumber(v[12])] = v[2] end end)
   each('data/enemybase.txt', function(v) if tonumber(v[2]) and v[1] ~= '' then PET_NAMES[tonumber(v[2])] = v[1] end end)
+  -- data/jobs.txt：名字, _, 职业 id；data/jobsancestry.txt：名字, 职类, 第 0～3 阶的职业 id（游民四阶都是 1）
+  each('data/jobs.txt', function(v) if tonumber(v[3]) then JOB_NAMES[tonumber(v[3])] = v[1] end end)
+  each('data/jobsancestry.txt', function(v)
+    local anc = tonumber(v[2])
+    for r = 0, 3 do
+      local id = tonumber(v[3 + r])
+      if anc and id and not JOB_OF[id] then JOB_OF[id] = { anc, r } end
+    end
+  end)
+  -- data/skill.txt：名字, 技能 id, …；data/skilllv.txt：序号, 技能 id, 职业 id, 最高等级（0＝学不了）
+  each('data/skill.txt', function(v) if tonumber(v[2]) then SKILL_NAMES[tonumber(v[2])] = v[1] end end)
+  each('data/skillexp.txt', function(v)
+    local t = {}
+    for i = 2, #v do t[i - 1] = tonumber(v[i]) end
+    if tonumber(v[1]) then SKILL_EXP[tonumber(v[1])] = t end
+  end)
+  each('data/skilllv.txt', function(v)
+    local skill, job, max = tonumber(v[2]), tonumber(v[3]), tonumber(v[4])
+    if skill and job and max and max > 0 then
+      SKILL_MAX[job] = SKILL_MAX[job] or {}
+      SKILL_MAX[job][skill] = max
+    end
+  end)
+end
+
+-- 网页可选的职业：游民＋战斗系（职类 10～160）的基础阶（见习，使用者指定只能选基础）
+local function jobChoices()
+  local list = {}
+  for id, j in pairs(JOB_OF) do
+    if j[1] <= 160 and j[2] == 0 then table.insert(list, { id = id, anc = j[1], rank = j[2], nameHex = hex(JOB_NAMES[id]) }) end
+  end
+  table.sort(list, function(a, b) return a.id < b.id end)
+  return list
+end
+
+---角色的职业、技能，和这个职业能学的技能（含最高等级）
+local function jobInfo(c)
+  local job = Char.GetData(c, CONST.对象_职业)
+  local skills, have = {}, {}
+  for slot = 0, Char.GetData(c, CONST.对象_技能栏) - 1 do
+    local id = Char.GetSkillID(c, slot)
+    if id >= 0 then
+      have[id] = true
+      local lv, si = Char.GetSkillLv(c, slot), Skill.GetSkillIndex(id)
+      local tbl = si >= 0 and SKILL_EXP[tonumber(Skill.GetData(si, CONST.SKILL_EXPTABLE))] or {}
+      -- 熟练度：目前技能经验，和升到下一级要的经验（经验表第 lv+1 级的起点）；到职业上限后引擎回 -1（实测）
+      table.insert(skills, { slot = slot, id = id, lv = lv, max = (SKILL_MAX[job] or {})[id] or 0,
+        exp = Char.GetSkillExp(c, slot), nextExp = tbl[lv + 1] or false, nameHex = hex(SKILL_NAMES[id]) })
+    end
+  end
+  local learnable = {}
+  for id, max in pairs(SKILL_MAX[job] or {}) do
+    if not have[id] then table.insert(learnable, { id = id, max = max, nameHex = hex(SKILL_NAMES[id]) }) end
+  end
+  table.sort(learnable, function(a, b) return a.id < b.id end)
+  return { id = job, nameHex = hex(JOB_NAMES[job]), slots = Char.GetData(c, CONST.对象_技能栏), skills = skills,
+    learnable = learnable, choices = jobChoices() }
 end
 
 -- 角色详细（网页点角色时显示，像游戏里的状态／道具／宠物视窗）：道具名、宠物名、招式名是 Big5，回 hex
@@ -297,7 +358,7 @@ function Module:detail(account)
       table.insert(pets, t)
     end
   end
-  return { ok = true, char = me, items = items, pets = pets }
+  return { ok = true, char = me, items = items, pets = pets, job = jobInfo(c) }
 end
 
 -- 国民装＋宠物（使用者指定「A（国民装）、GM 发、宠都可」）：道具 ID 是法兰城武器店／防具店卖的 Lv1 国民系列（data/itemset.txt）
@@ -447,6 +508,37 @@ local ACTIONS = {
     return ok, 'unequipped'
   end,
   -- 丢弃背包道具 {slot = 8～27}（使用者指定）：直接删掉，不掉在地上
+  -- 就职（GM 直接设，不跑就职任务）：职业、职类、职阶一起改；已学的技能不动
+  setjob = function(a, req, c)
+    local job = tonumber(req.job)
+    local j = job and JOB_OF[job]
+    if not j or j[1] > 160 or j[2] ~= 0 then return false, 'bad_param' end
+    Char.SetData(c, CONST.对象_职业, job)
+    Char.SetData(c, CONST.对象_职类ID, j[1])
+    Char.SetData(c, CONST.对象_职阶, j[2])
+    NLG.UpChar(c)
+    Char.SaveToDb(c)
+    return true, 'job_set'
+  end,
+  -- 学技能：只学到 Lv1（使用者指定，像跟导师学一样），之后靠战斗升级；这个职业学不了的（data/skilllv.txt）不给学
+  learn = function(a, req, c)
+    local skill = tonumber(req.skill)
+    if not (skill and (SKILL_MAX[Char.GetData(c, CONST.对象_职业)] or {})[skill]) then return false, 'bad_param' end
+    if Char.HaveSkill(c, skill) >= 0 then return false, 'bad_param' end
+    local slot = Char.AddSkill(c, skill)
+    if slot < 0 then return false, 'skill_full' end
+    Char.SetSkillLevel(c, slot, 1) -- AddSkill 学到的是 0 级（实测），自动战斗挑不到招式
+    NLG.UpChar(c)
+    Char.SaveToDb(c)
+    return true, 'learned'
+  end,
+  forget = function(a, req, c)
+    local skill = tonumber(req.skill)
+    if not skill or Char.DelSkill(c, skill) < 0 then return false, 'bad_param' end
+    NLG.UpChar(c)
+    Char.SaveToDb(c)
+    return true, 'forgot'
+  end,
   discard = function(a, req, c)
     local slot = tonumber(req.slot)
     if not slot or slot < 8 or slot > 27 or Char.GetItemIndex(c, slot) < 0 then return false, 'bad_param' end
@@ -463,7 +555,8 @@ local ACTIONS = {
   end,
 }
 local NEED_ONLINE = { auto = true, hospital = true, encount = true, grind = true, warp = true, join = true, leave = true, outfit = true,
-  autopoints = true, addpoint = true, petstate = true, unequip = true, equip = true, discard = true }
+  autopoints = true, addpoint = true, petstate = true, unequip = true, equip = true, discard = true,
+  setjob = true, learn = true, forget = true }
 
 function Module:encountRate(floor, x, y)
   return encountRate(floor, x, y)

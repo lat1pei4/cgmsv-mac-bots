@@ -58,6 +58,8 @@
   .card { border: 2px solid var(--line); border-radius: 6px; padding: 10px 12px; background: #f8efd6; min-width: 0; }
   .card h3 { font-size: 13px; margin: 0 0 8px; color: var(--muted); }
   .card.wide { grid-column: 1 / -1; }
+  .skills { width: auto; font-size: 13px; }
+  .skills td { padding: 3px 12px 3px 0; border-bottom: none; vertical-align: middle; }
   .kv { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 2px 10px; font-size: 13px; max-width: 340px; }
   .kv dt { color: var(--muted); } .kv dd { margin: 0; font-variant-numeric: tabular-nums; }
   .slots { display: grid; gap: 4px; font-size: 12px; }
@@ -144,6 +146,7 @@ const MSG = {
   autopoints_on: '自動配點開', autopoints_off: '自動配點關（可手動配點）', autopoints: '自動配點開著，先關掉才能手動配',
   point_added: '已配點', no_points: '點數不夠', pet_state: '已切換寵物狀態', unequipped: '已卸下', equipped: '已裝備',
   equip_failed: '裝不上（這件不能裝或沒有合適的欄位）', bag_full: '背包滿了', discarded: '已丟棄',
+  job_set: '已就職', learned: '已學會（Lv1）', forgot: '已忘記技能', skill_full: '技能欄滿了',
 };
 const text = code => { const [k, arg] = String(code ?? '').split(':'); return (MSG[k] || k) + (arg ? ' ' + arg : ''); };
 // 角色名是遊戲端（台版）送的 Big5 原始位元組，伺服器回 hex
@@ -385,6 +388,21 @@ document.getElementById('dbody').addEventListener('click', e => {
     if (confirm('丟棄這個道具？（直接刪除，不會掉在地上）')) { bagSel = null; detailAct('discard', { slot: Number(drop.dataset.discard) }); }
     return;
   }
+  if (e.target.closest('[data-setjob]')) {
+    const sel = document.querySelector('#dbody select[data-job]');
+    if (confirm(`改成「${sel.selectedOptions[0].textContent}」？（已學的技能不會動）`)) detailAct('setjob', { job: Number(sel.value) });
+    return;
+  }
+  if (e.target.closest('[data-learn]')) {
+    const opt = document.querySelector('#dbody select[data-newskill]').selectedOptions[0];
+    detailAct('learn', { skill: Number(opt.value) });
+    return;
+  }
+  const forget = e.target.closest('[data-forget]');
+  if (forget) {
+    if (confirm('忘記這個技能？')) detailAct('forget', { skill: Number(forget.dataset.forget) });
+    return;
+  }
   const t = e.target.closest('[data-point],[data-unequip],[data-equip],[data-autopoints]');
   if (!t) return;
   const d = t.dataset;
@@ -415,6 +433,22 @@ function petPanel(pets, c) {
     </div></div>`;
 }
 
+// 職業與技能：選職業按「就職」；新技能只學到 Lv1（之後靠戰鬥升級，上限＝這個職業能學到的最高等級）；已學的可忘記
+function jobPanel(j) {
+  const skills = list(j.skills), learnable = list(j.learnable);
+  return `<div class="toolbar"><select data-job>${list(j.choices).map(x =>
+      `<option value="${x.id}" ${x.id === j.id ? 'selected' : ''}>${esc(name(x.nameHex))}</option>`).join('')}</select>
+      <button data-setjob>就職</button><span class="muted">目前：${esc(name(j.nameHex)) || j.id}</span></div>
+    <table class="skills">${skills.map(s => `<tr><td>${esc(name(s.nameHex)) || s.id}</td>
+      <td class="num">Lv ${s.lv}${s.max ? `／最高 ${s.max}` : '（這個職業學不了）'}</td>
+      <td class="num">${s.max && s.lv >= s.max ? '已到職業上限' : `熟練度 ${s.exp}${s.nextExp ? `／${s.nextExp}` : ''}`}</td>
+      <td><button data-forget="${s.id}">忘記</button></td></tr>`).join('') || '<tr><td class="muted">還沒學技能</td></tr>'}</table>
+    <div class="toolbar" style="margin-top:8px">${learnable.length ? `<select data-newskill>${learnable.map(s =>
+      `<option value="${s.id}">${esc(name(s.nameHex)) || s.id}（最高 Lv ${s.max}）</option>`).join('')}</select>
+      <button data-learn>學（Lv1）</button>` : '<span class="muted">這個職業沒有其他可學的技能</span>'}
+      <span class="muted">技能欄 ${skills.length}／${j.slots}</span></div>`;
+}
+
 function renderDetail(d) {
   if (document.activeElement && document.activeElement.tagName === 'SELECT' && document.getElementById('detail').contains(document.activeElement)) return;
   const c = d.char;
@@ -427,6 +461,7 @@ function renderDetail(d) {
       <div class="toolbar"><button class="${c.autoPoints ? 'on' : ''}" data-autopoints="${!c.autoPoints}">自動配點</button>
         <span class="muted">${c.autoPoints ? '人物攻敏、寵物純攻' : '手動：點 +1 配點'}</span></div>${stats(c, '', !c.autoPoints)}</div>
     <div class="card"><h3>裝備</h3><div class="slots equip">${EQUIP.map((l, i) => itemCell(items[i], l)).join('')}</div></div>
+    <div class="card wide"><h3>職業與技能</h3>${d.job ? jobPanel(d.job) : ''}</div>
     <div class="card wide"><h3>背包</h3><div class="slots bag">${Array.from({ length: 20 }, (_, i) => bagCell(items[i + 8])).join('')}</div>${bagBar(items[bagSel])}</div>
     <div class="card wide"><h3>寵物（${pets.length}）</h3>${pets.length ? petPanel(pets, c) : '<span class="muted">沒有寵物</span>'}</div>`;
 }
