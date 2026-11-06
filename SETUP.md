@@ -24,6 +24,7 @@
 ```
 crossgate/
 ├─ SETUP.md / cg_protocol_notes.md
+├─ docs/api/     cgmsv Lua API 參考（全部函式與事件，含生態系重點與待實測清單）
 ├─ tools/        Wine、啟動腳本、轉碼工具、登錄檔設定
 ├─ wineprefix/   Wine 環境（已移除 z:，d: 指向 crossgate/，使用者資料夾不連到 Mac 家目錄）
 ├─ server-b/     cgmsv 26.8d（使用中）
@@ -64,6 +65,7 @@ crossgate/
 
 ## 自動戰鬥與測試
 
+- 補給用完（有人血不到一半、沒人會補血、也沒有回血藥，或全隊魔力剩不到 10%）時，戰鬥結束後整隊傳到東醫（地圖 1112 的 (12,42)）並補滿血魔，不收錢。觸發事件是 `ResetCharaBattleStateEvent`（逃跑或打贏後，角色離開戰場時觸發）。傳送隊長時，隊員會一起過去
 - 玩家在聊天打 `/auto` 開關（`server-b/modules-src/autobattle.utf8.lua`）。只用畫面看得到的資訊：我方血量、魔力、倒下、異常狀態；敵方位置、血條比例、倒下、異常狀態
 - 無頭測試：`ModuleConfig.lua` 打開 `loadModule('abtest')`，伺服器啟動 30 秒後 24 隊假人（隨機職業 1～4 人、隨機技能組合、Lv 5／20／40／70）各打 4 場，log 的 `summary` 行有 WIN／LOSE／ESCAPED、回合數、秒數。96 場約 70 秒
 - 逃跑成功時引擎回報的勝方是敵方，要用「還有人活著」區分逃跑和全滅
