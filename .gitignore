@@ -1,6 +1,7 @@
 # 白名單：只追蹤自己寫的檔案（Wine、遊戲本體、伺服器程式、資料、密碼檔都不進版控）
 /*
 !/.gitignore
+!/README.md
 !/SETUP.md
 !/CLAUDE.md
 !/cg_protocol_notes.md
