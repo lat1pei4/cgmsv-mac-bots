@@ -597,10 +597,28 @@ function Module:onBattleOver(b)
   focus[b], turnState[b], history[b], noEscape[b] = nil, nil, nil, nil
 end
 
+-- 引擎的自动战斗开关不会存档，另外记在角色的 ExtData，登入时恢复（玩家 /auto 与管理页共用）
+local AUTO_KEY = 'autobattle'
+
+function Module:setAuto(c, on)
+  Char.SetData(c, CONST.对象_自动战斗开关, on and 1 or 0)
+  NLG.UpChar(c)
+  Char.SetExtData(c, AUTO_KEY, on and '1' or nil)
+  Char.SaveToDb(c) -- SetExtData 不会马上写进资料库（实测）
+end
+
+function Module:onLogin(c)
+  if Char.GetExtData(c, AUTO_KEY) == '1' then
+    Char.SetData(c, CONST.对象_自动战斗开关, 1)
+    NLG.UpChar(c)
+  end
+  return 0
+end
+
 function Module:onTalk(player, msg)
   if msg == '/auto' or msg == '、auto' then
     local on = Char.GetData(player, CONST.对象_自动战斗开关) ~= 1
-    Char.SetData(player, CONST.对象_自动战斗开关, on and 1 or 0)
+    self:setAuto(player, on)
     NLG.SystemMessage(player, on and '自动战斗：开启' or '自动战斗：关闭')
     return 0
   end
@@ -624,6 +642,7 @@ local WALK_MS = 400
 -- NLG.WalkMove 的方向（实测）：0 北，顺时针到 7 西北
 local DIRS = { [0] = { 0, -1 }, { 1, -1 }, { 1, 0 }, { 1, 1 }, { 0, 1 }, { -1, 1 }, { -1, 0 }, { -1, -1 } }
 local walking = {} -- [队长] = 走路排程 id
+local pending = {} -- [队长] = true：战斗后等着回东医（还没开始传送）
 
 local function partyOf(c)
   local leader = Char.GetPartyMember(c, 0)
@@ -703,7 +722,7 @@ end
 -- NLG.WalkMove 不会带队员走（实测），队员第 k 个照队长走过的路晚 k 格跟上，最后排在队长后面
 function Module:toHospital(c)
   local members = partyOf(c)
-  if not members then return false end
+  if not members or Battle.GetCurrentBattle(c) >= 0 then return false end
   if walking[c] then return true end
   Char.Warp(c, 0, HOSPITAL.map, HOSPITAL.x, HOSPITAL.y) -- 传队长，队员会跟着
   local dirs = pathTo(HOSPITAL.map, HOSPITAL.x, HOSPITAL.y, NURSE.x, NURSE.y)
@@ -744,12 +763,19 @@ function Module:onLeaveBattle(c)
   if Char.GetData(c, CONST.对象_自动战斗开关) ~= 1 then return 0 end
   local members = partyOf(c)
   if not members or not exhausted(members) then return 0 end
+  pending[c] = true
   Cron.RunAt(os.time() + 1, function() -- 等引擎把战斗状态清完再传送
+    pending[c] = nil
     if self:toHospital(c) then
       NLG.SystemMessage(c, '[自動戰鬥] 補給用完，回東醫找護士補血魔')
     end
   end)
   return 0
+end
+
+---回东医途中（等传送或走路中）；管理页的练等这段时间不遇敌
+function Module:busy(c)
+  return pending[c] ~= nil or walking[c] ~= nil
 end
 
 function Module:onLoad()
@@ -759,6 +785,7 @@ function Module:onLoad()
   self:regCallback('TalkEvent', Func.bind(self.onTalk, self))
   self:regCallback('AutoBattleCommandEvent', Func.bind(self.onAutoBattle, self))
   self:regCallback('ResetCharaBattleStateEvent', Func.bind(self.onLeaveBattle, self))
+  self:regCallback('LoginEvent', Func.bind(self.onLogin, self))
 end
 
 function Module:onUnload()

@@ -39,6 +39,8 @@
 
 - `NLG.WalkMove(c, dir)`：dir 0 北，順時針到 7 西北；不會帶隊員走。`Char.Warp(隊長)` 會帶整隊。
 - `Char.GetPartyMember(隊長, 0..4)`：0 是隊長，沒組隊回 -1。
+- 要跨登出／重啟保存的角色狀態一律存 `Char.SetExtData`（表 `hook_charaext`），寫完要 `Char.SaveToDb`，否則不會馬上進資料庫。登入時在 `LoginEvent(c)` 讀回。現用鍵：`autobattle`（自動戰鬥開關）、`grind`（練功地點 `[floor,x,y]`）、`LastLogoutPoint`（loginGate 模組）。
+- 引擎的自動戰鬥開關（`对象_自动战斗开关`）不會存檔。
 - 新角色下線再登入會出現在召喚之間，不是下線時的位置。
 
 ## Commit

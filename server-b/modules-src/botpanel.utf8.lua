@@ -5,8 +5,24 @@
 ---所以讯息一律回英数代码（网页翻成中文），角色名回原始位元组的 hex（网页用 big5 解码），地图名（GBK）才用 Iconv 转。
 local Module = ModuleBase:createModule('botpanel')
 
-local activity = {} -- [account] = 'grind'（原地练等：不在战斗中就遇敌）
 local GRIND_SECS = 3
+-- 练等：练功地点 [floor, x, y] 记在角色的 ExtData（重启、重载、重新登入都还在）
+local GRIND_KEY = 'grind'
+
+local function spotOf(c)
+  local raw = Char.GetExtData(c, GRIND_KEY)
+  local ok, spot = pcall(JSON.decode, raw or '')
+  return ok and type(spot) == 'table' and spot[3] and spot or nil
+end
+
+local function setSpot(c, spot)
+  Char.SetExtData(c, GRIND_KEY, spot and JSON.encode(spot) or nil)
+  Char.SaveToDb(c) -- SetExtData 不会马上写进资料库（实测）
+end
+
+local function here(c)
+  return { Char.GetData(c, CONST.CHAR_地图), Char.GetData(c, CONST.CHAR_X), Char.GetData(c, CONST.CHAR_Y) }
+end
 
 local function reply(t)
   return JSON.encode(t)
@@ -45,9 +61,10 @@ function Module:list()
     local st = login:status(r.account)
     local item = { account = r.account, slot = tonumber(r.slot), autologin = tonumber(r.autologin) == 1,
       charname = r.charname,
-      state = st and st.state or 'offline', err = st and st.err, activity = activity[r.account] }
+      state = st and st.state or 'offline', err = st and st.err }
     if st and st.state == 'online' and st.char >= 0 then
       item.char = charInfo(st.char)
+      item.activity = spotOf(st.char) and 'grind' or nil
     end
     table.insert(out, item)
   end
@@ -62,11 +79,10 @@ end
 -- 每个指令回 (成功, 讯息代码)
 local ACTIONS = {
   login = function(a) return getModule('botlogin'):login(a), 'login' end,
-  logout = function(a) activity[a] = nil; return getModule('botlogin'):logout(a), 'logout' end,
+  logout = function(a) return getModule('botlogin'):logout(a), 'logout' end,
   autologin = function(a, req) getModule('botlogin'):setAutologin(a, req.on); return true, 'saved' end,
   auto = function(a, req, c)
-    Char.SetData(c, CONST.对象_自动战斗开关, req.on and 1 or 0)
-    NLG.UpChar(c)
+    getModule('autobattle'):setAuto(c, req.on)
     return true, req.on and 'auto_on' or 'auto_off'
   end,
   hospital = function(a, req, c)
@@ -75,14 +91,16 @@ local ACTIONS = {
   encount = function(a, req, c)
     return Battle.Encount(c, c) >= 0, 'encount'
   end,
-  grind = function(a, req)
-    activity[a] = req.on and 'grind' or nil
+  grind = function(a, req, c)
+    setSpot(c, req.on and here(c) or nil) -- 在哪里开就在哪里练
     return true, req.on and 'grind_on' or 'grind_off'
   end,
   warp = function(a, req, c)
     local floor, x, y = tonumber(req.floor), tonumber(req.x), tonumber(req.y)
     if not (floor and x and y) or NLG.Walkable(0, floor, x, y) ~= 1 then return false, 'bad_pos' end
-    return Char.Warp(c, 0, floor, x, y) == 1, 'warped'
+    local ok = Char.Warp(c, 0, floor, x, y) == 1
+    if ok and spotOf(c) then setSpot(c, { floor, x, y }) end -- 练等中传送＝换练功地点
+    return ok, 'warped'
   end,
   join = function(a, req, c)
     if not validAccount(req.leader) then return false, 'bad_leader' end
@@ -93,7 +111,7 @@ local ACTIONS = {
   end,
   leave = function(a, req, c) Char.LeaveParty(c); return true, 'left' end,
 }
-local NEED_ONLINE = { auto = true, hospital = true, encount = true, warp = true, join = true, leave = true }
+local NEED_ONLINE = { auto = true, hospital = true, encount = true, grind = true, warp = true, join = true, leave = true }
 
 function Module:act(req)
   local a, fn = req.account, ACTIONS[req.action or '']
@@ -105,13 +123,20 @@ function Module:act(req)
   return { ok = ok and true or false, msg = msg }
 end
 
--- 原地练等：练等中的角色（队长或单人）不在战斗中就遇敌；补给用完由 autobattle 送回东医
+-- 练等：练等中的角色（队长或单人）不在战斗中就遇敌；补给用完由 autobattle 送回东医，
+-- 补完（或重新登入后）不在练功地点的地图就传回去
 function Module:grind()
-  for a, act in pairs(activity) do
-    local c = onlineChar(a)
-    if act == 'grind' and c >= 0 and Battle.GetCurrentBattle(c) < 0 then
-      local leader = Char.GetPartyMember(c, 0)
-      if leader < 0 or leader == c then Battle.Encount(c, c) end
+  local hospital = getModule('autobattle')
+  for _, r in ipairs(getModule('botlogin'):accounts()) do
+    local c = onlineChar(r.account)
+    local spot = c >= 0 and spotOf(c)
+    local leader = c >= 0 and Char.GetPartyMember(c, 0)
+    if spot and (leader < 0 or leader == c) and Battle.GetCurrentBattle(c) < 0 and not hospital:busy(c) then
+      if Char.GetData(c, CONST.CHAR_地图) == spot[1] then
+        Battle.Encount(c, c)
+      else
+        Char.Warp(c, 0, spot[1], spot[2], spot[3]) -- 传队长，队员会跟着
+      end
     end
   end
 end
@@ -138,7 +163,6 @@ function Module:onLoad()
   http:regApi('post', 'botdel', function(_, raw)
     local t = body(raw)
     if not validAccount(t.account) then return reply({ ok = false, msg = 'bad_param' }) end
-    activity[t.account] = nil
     return reply({ ok = getModule('botlogin'):removeAccount(t.account), msg = 'deleted' })
   end)
   self.grindTask = Cron.AddInterval(GRIND_SECS * 1000, function() self:grind() end, 1)

@@ -82,6 +82,7 @@ crossgate/
 - `modules-src/botlogin.utf8.lua`：模組自己用 LuaJIT FFI（Winsock）連本機 9030，走和遊戲端一樣的登入流程，連線不斷，角色就是一般在線玩家；登出＝關連線，引擎照常存檔。帳號存在 `data.db3` 的 `bot_account` 表，`autologin=1` 的在伺服器啟動 10 秒後自動登入
 - 協定是明文（`指令 參數… ` 加換行，用 port 9031 的抓包代理確認），不是 xgmsv 那套加密。戰鬥中遊戲端要做的事 bot 也照做：每回合回兩次 `Rg N`（不下指令，引擎再觸發 `AutoBattleCommandEvent` 由 autobattle 出招），戰鬥結束（`LYIm C|20`）回 `eL 0` 回到地圖；不回就會一直卡在戰鬥中
 - 編碼：`Iconv` 只有 GBK↔UTF-8。API 的訊息回英數代碼（網頁翻中文），角色名回 Big5 原始位元組的 hex（網頁用 `TextDecoder('big5')` 解）
+- 狀態存在角色身上（ExtData），登出、重啟後自動恢復：自動戰鬥開關（玩家打 `/auto` 也算）、練等與練功地點。練等中補給用完回東醫，補滿後自己傳回練功地點；練等中用網頁傳送＝換練功地點
 - `modules-src/botpanel.utf8.lua`：網頁用的 API（`GET /api/bots`、`POST /api/botact`／`botadd`／`botdel`）
 
 ## 卡關紀錄

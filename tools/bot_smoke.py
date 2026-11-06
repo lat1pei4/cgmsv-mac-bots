@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""bot 冒煙測試：用管理 API 讓兩個 bot 走一遍「登入 → 組隊 → 打一場 → 回東醫」，逐項回報 PASS／FAIL。
+"""bot 冒煙測試：用管理 API 讓兩個 bot 走一遍「登入 → 組隊 → 打一場 → 回東醫 → 重新登入 → 練等」，逐項回報 PASS／FAIL。
 
 用法：python3 -I tools/bot_smoke.py [隊長帳號] [隊員帳號]（預設 aitest01 aitest02，要先在管理頁加過）
-改了 botlogin／botpanel／autobattle 之後跑一次。會把兩隻傳到芙蕾雅打怪，結束時離隊。
+改了 botlogin／botpanel／autobattle 之後跑一次。會把兩隻傳到芙蕾雅打怪；結束時隊員已離隊（重新登入）、練等已關。
 """
 import json
 import sys
@@ -66,6 +66,7 @@ def main():
         sys.exit(1)
 
     for a in (leader, member):
+        act(a, 'grind', on=False)  # 上次中途失敗留下的練等
         act(a, 'leave')
         act(a, 'auto', on=True)
     act(member, 'join', leader=leader)
@@ -91,7 +92,28 @@ def main():
         # 到護士前的下一步（0.4 秒後）才補，等一下
         check('全隊補滿血', wait(lambda s: all(s[a]['char']['hp'] == s[a]['char']['maxHp'] for a in (leader, member)), 3))
 
-    act(member, 'leave')
+    # 狀態存在角色 ExtData：重新登入要恢復
+    act(member, 'logout')
+    time.sleep(2)
+    act(member, 'login')
+    back = wait(lambda s: s[member]['state'] == 'online', 20)
+    check('重新登入後自動戰鬥自動恢復', back and bots()[member]['char']['auto'])
+
+    # 練等：在野外開練等 → 打完一場回東醫 → 補完自己傳回練功點
+    act(leader, 'warp', floor=FIELD[0], x=FIELD[1], y=FIELD[2])
+    act(leader, 'grind', on=True)
+    check('練等自動遇敵', wait(lambda s: s[leader]['char']['battle'] and s[leader].get('activity') == 'grind', 10))
+    sent = False
+    for _ in range(5):  # 練等每 3 秒就遇下一場，戰鬥中不能回東醫，抓空檔
+        wait(lambda s: not s[leader]['char']['battle'], 90)
+        if act(leader, 'hospital')['ok']:
+            sent = True
+            break
+    check('練等中回東醫', sent and wait(lambda s: pos(s[leader]) == NURSE, 15))
+    check('補完自己回練功點', wait(lambda s: pos(s[leader])[0] == FIELD[0], 10), str(pos(bots()[leader])))
+    act(leader, 'grind', on=False)
+    wait(lambda s: not s[leader]['char']['battle'], 90)
+
     print(f'\n{sum(results)}/{len(results)} PASS')
     sys.exit(0 if all(results) else 1)
 

@@ -29,7 +29,7 @@
 | 用途 | API | 狀態 |
 |---|---|---|
 | 無頭角色 | `Char.CreateDummy`／`DelDummy`／`IsDummy`；`Char.SetDummy` 只有「標記為假人」的說明，能否把真角色轉成掛機未驗證 | 部分已確認 |
-| 角色永久資料 | `Char.SetExtData`／`GetExtData`（字串鍵，可存 JSON，寫進資料庫）、`Char.SaveToDb`；`SQL.QueryEx`（`?` 綁定）＋模組 migrations 自建表 | 已確認 |
+| 角色永久資料 | `Char.SetExtData`／`GetExtData`（字串鍵，可存 JSON，存在 `hook_charaext` 表）、`Char.SaveToDb`；`SQL.QueryEx`（`?` 綁定）＋模組 migrations 自建表 | 【實測】登出、重啟都留得住；**`SetExtData` 不會馬上寫進資料庫，要接著 `SaveToDb`**；傳 nil 清除 |
 | 採集 | `GatherItemEvent(c, 技能ID, 等級, itemId)` 回傳 itemId 可改產物；`TechArea.CreateTechArea(...)` 可在任意地圖建採集區（最多 10 種產物與機率）；技能 225 伐木／226 狩獵／227 挖掘 | 文件 |
 | 製造 | `Recipe.GetData`／`GiveRecipe`／`HasRecipe`（對應 `data/itemrecipe.txt`）；`MergeItemEvent(c, 技能ID, 等級, itemIndex, 寶石)`，itemIndex=-1 是失敗；角色最多 64 個配方 | 已確認（資料表比對） |
 | 技能經驗 | `Char.GetSkillExp`／`SetSkillExp(c, 技能欄位, exp)`（欄位用 `Char.HaveSkill` 取得）；`ProductSkillExpEvent`、`BattleSkillExpEvent`、`GetExpEvent` 回傳值可改經驗 | 推測／文件 |
