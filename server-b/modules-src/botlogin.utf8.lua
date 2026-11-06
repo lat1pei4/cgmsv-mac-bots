@@ -65,9 +65,9 @@ local function parseCharList(plain)
   return list
 end
 
--- 建角色：沿用游戏端实际送出的造型、头像、点数与属性，只换名字
+-- 建角色：沿用游戏端实际送出的造型、头像与属性，只换名字；点数（体力 力量 强度 速度 魔法，16 进位）配攻敏各 15
 local function createLine(slot, name)
-  return string.format('aSEl %d %s rE9 110s 0 0 0 f f 0 0 0 a', slot, name)
+  return string.format('aSEl %d %s rE9 110s 0 f 0 f 0 0 0 0 a', slot, name)
 end
 
 local function close(c, state, err)
