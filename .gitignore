@@ -22,6 +22,8 @@
 !/server-b/
 /server-b/*
 !/server-b/modules-src/
+# 改自 xmancheng/cgmsv-lua，上游沒有授權條款，只留本機
+/server-b/modules-src/merc.utf8.lua
 !/server-b/gmsv/
 /server-b/gmsv/*
 !/server-b/gmsv/cgmsv.cf

@@ -43,5 +43,6 @@
 
 ## Commit
 
-- 訊息用日文，先跑 `python3 ~/.claude/hooks/ja_glyphs.py --strict <檔>`，再 `git commit -F`。不用 `git add -A`／`git add .`。
+- 這個 repo 是 public（github.com/lat1pei4/cgmsv-mac-bots）：**commit 訊息用英文、README 用繁體中文，都不用日文**（使用者 2026-11-06 指示，優先於全域的「commit 用日文」）。用 `git commit -F`，不用 `git add -A`／`git add .`。
+- 別人的程式碼沒有授權條款就不進版控：`modules-src/merc.utf8.lua` 改自 xmancheng/cgmsv-lua（沒有 LICENSE），只留在本機，已從歷史移除。有授權的要附上授權全文（例：`docs/api/upstream/LICENSE`）。
 - `.gitignore` 是白名單：新的追蹤路徑要先加 `!` 規則。
