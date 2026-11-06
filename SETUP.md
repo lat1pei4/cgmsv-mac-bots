@@ -64,8 +64,9 @@ crossgate/
 
 ## 自動戰鬥與測試
 
-- 玩家在聊天打 `/auto` 開關（`server-b/modules-src/autobattle.utf8.lua`）。只用畫面看得到的資訊：我方血魔比例、倒下、異常狀態；敵方位置、倒下、異常狀態
-- 無頭測試：`ModuleConfig.lua` 打開 `loadModule('abtest')`，伺服器啟動 30 秒後 20 隊假人各打 3 場，log 的 `summary` 行有勝負、回合數、秒數。約 0.8 秒／回合
+- 玩家在聊天打 `/auto` 開關（`server-b/modules-src/autobattle.utf8.lua`）。只用畫面看得到的資訊：我方血量、魔力、倒下、異常狀態；敵方位置、血條比例、倒下、異常狀態
+- 無頭測試：`ModuleConfig.lua` 打開 `loadModule('abtest')`，伺服器啟動 30 秒後 24 隊假人（隨機職業 1～4 人、隨機技能組合、Lv 5／20／40／70）各打 4 場，log 的 `summary` 行有 WIN／LOSE／ESCAPED、回合數、秒數。96 場約 70 秒
+- 逃跑成功時引擎回報的勝方是敵方，要用「還有人活著」區分逃跑和全滅
 - 倒下的角色也要給指令，否則伺服器等 420 秒逾時
 
 ## 卡關紀錄
