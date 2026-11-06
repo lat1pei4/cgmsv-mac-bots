@@ -1,13 +1,26 @@
----自动战斗：玩家说 /auto 开关。只用玩家画面上看得到的信息判断：
+---自动战斗：玩家说 /auto 切换引擎的自动战斗开关，引擎要指令时（AutoBattleCommandEvent）由本模块出招。
+---假人（测试用）则在 BeforeBattleTurnEvent 出招。只用玩家画面上看得到的信息判断：
 ---我方：血条／魔条比例、倒下、异常状态；敌方：位置、是否倒下、异常状态图示。
 ---不读敌方血量／能力值／下一步行动。
 local Module = ModuleBase:createModule('autobattle')
 
-local enabled = {}  -- [charIndex] = true
-local focus = {}    -- [battleIndex] = 集火目标位置
-local lastTurn = {} -- [battleIndex] = 已处理的回合
-local spent = {}    -- [charIndex] = 本回合已排定要花的魔力（一回合两动时用）
-local planned = {}  -- [slot] = 本回合已有人要补血／复活／洁净的我方位置，不重复
+local enabled = {}   -- [charIndex] = true（测试用假人）
+local focus = {}     -- [battleIndex] = 集火目标位置
+local turnState = {} -- [battleIndex] = {turn, spent, planned, dummiesDone}
+local spent = {}     -- 处理中这场战斗：[charIndex] = 本回合已排定要花的魔力（一回合两动时用）
+local planned = {}   -- 处理中这场战斗：[slot] = 本回合已有人要补血／复活／洁净的我方位置，不重复
+
+-- 切到这场战斗的本回合状态（新回合就重建）
+local function enterTurn(b)
+  local turn = Battle.GetTurn(b)
+  local s = turnState[b]
+  if not s or s.turn ~= turn then
+    s = { turn = turn, spent = {}, planned = {} }
+    turnState[b] = s
+  end
+  spent, planned = s.spent, s.planned
+  return s
+end
 
 local MP_RESERVE = 0.3 -- 会补血的角色，攻击技能只在剩余魔力 >= 30% 时才放
 
@@ -233,45 +246,66 @@ function Module:act(b, actor, techs, side)
     'mp=', Char.GetData(actor, CONST.对象_魔), 'spent=', spent[actor] or 0)
 end
 
+-- 人物（和宠物）本回合的指令；没带宠物时人物动两次
+function Module:command(b, slot, p)
+  local side = slot < 10 and 0 or 1
+  self:act(b, p, playerTechs(p), side)
+  local pet = Battle.GetPlayer(b, slot + 5)
+  if pet >= 0 and Char.GetData(pet, CONST.对象_类型) == CONST.对象类型_宠 then
+    if Battle.IsWaitingCommand(pet) == 1 then
+      self:act(b, pet, petTechs(pet), side)
+    end
+  elseif Battle.IsWaitingCommand(p) == 1 then
+    self:act(b, p, playerTechs(p), side)
+  end
+end
+
+-- 测试用假人
 function Module:onTurn(b)
-  local turn = Battle.GetTurn(b)
-  if lastTurn[b] == turn then
+  local s = enterTurn(b)
+  if s.dummiesDone then
     return
   end
-  lastTurn[b] = turn
-  spent, planned = {}, {}
+  s.dummiesDone = true
   for slot = 0, 19 do
     local p = Battle.GetPlayer(b, slot)
     if p >= 0 and enabled[p] and Battle.IsWaitingCommand(p) == 1 then
-      local side = slot < 10 and 0 or 1
-      self:act(b, p, playerTechs(p), side)
-      local pet = Battle.GetPlayer(b, slot + 5)
-      if pet >= 0 and Char.GetData(pet, CONST.对象_类型) == CONST.对象类型_宠 then
-        if Battle.IsWaitingCommand(pet) == 1 then
-          self:act(b, pet, petTechs(pet), side)
-        end
-      elseif Battle.IsWaitingCommand(p) == 1 then -- 没带宠物：人物第 2 动
-        self:act(b, p, playerTechs(p), side)
-      end
+      self:command(b, slot, p)
     end
   end
 end
 
-function Module:onBattleOver(b)
-  focus[b], lastTurn[b] = nil, nil
-end
-
-function Module:onTalk(player, msg)
-  if msg == '/auto' or msg == '、auto' then
-    enabled[player] = not enabled[player] or nil
-    NLG.SystemMessage(player, enabled[player] and '自动战斗：开启' or '自动战斗：关闭')
-    return 0
+-- 玩家开了自动战斗开关时，引擎每回合来要指令；必须回传 1，否则原地不动
+function Module:onAutoBattle(b, p)
+  local ok, err = pcall(function()
+    enterTurn(b)
+    for slot = 0, 19 do
+      if Battle.GetPlayer(b, slot) == p then
+        if Battle.IsWaitingCommand(p) == 1 then
+          self:command(b, slot, p)
+        end
+        return
+      end
+    end
+  end)
+  if not ok then
+    self:logError('onAutoBattle', err)
   end
   return 1
 end
 
-function Module:onLogout(player)
-  enabled[player] = nil
+function Module:onBattleOver(b)
+  focus[b], turnState[b] = nil, nil
+end
+
+function Module:onTalk(player, msg)
+  if msg == '/auto' or msg == '、auto' then
+    local on = Char.GetData(player, CONST.对象_自动战斗开关) ~= 1
+    Char.SetData(player, CONST.对象_自动战斗开关, on and 1 or 0)
+    NLG.SystemMessage(player, on and '自动战斗：开启' or '自动战斗：关闭')
+    return 0
+  end
+  return 1
 end
 
 --- 测试模块用：让假人也由本模块指挥
@@ -284,8 +318,7 @@ function Module:onLoad()
   self:regCallback('BeforeBattleTurnEvent', Func.bind(self.onTurn, self))
   self:regCallback('BattleOverEvent', Func.bind(self.onBattleOver, self))
   self:regCallback('TalkEvent', Func.bind(self.onTalk, self))
-  self:regCallback('LogoutEvent', Func.bind(self.onLogout, self))
-  self:regCallback('DropEvent', Func.bind(self.onLogout, self))
+  self:regCallback('AutoBattleCommandEvent', Func.bind(self.onAutoBattle, self))
 end
 
 function Module:onUnload()
