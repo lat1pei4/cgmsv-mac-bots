@@ -617,8 +617,13 @@ function Module:setNoEscape(battleIndex, on)
 end
 
 -- 回东医：开 /auto 的玩家（队长或单人）离开战斗后，若「有人血不到一半、没人会补血、也没有回血药」
--- 或「全队魔力剩不到 10%」，整队传送到法兰城东门医院（地图 1112，进门的位置）并补满血魔
+-- 或「全队魔力剩不到 10%」，整队传送到法兰城东门医院（地图 1112，进门的位置），走到护士尤美儿（8,30）前面再补满血魔
 local HOSPITAL = { map = 1112, x = 12, y = 42 }
+local NURSE = { x = 8, y = 31, face = 0 } -- 站在护士正下方、面向北
+local WALK_MS = 400
+-- NLG.WalkMove 的方向（实测）：0 北，顺时针到 7 西北
+local DIRS = { [0] = { 0, -1 }, { 1, -1 }, { 1, 0 }, { 1, 1 }, { 0, 1 }, { -1, 1 }, { -1, 0 }, { -1, -1 } }
+local walking = {} -- [队长] = 走路排程 id
 
 local function partyOf(c)
   local leader = Char.GetPartyMember(c, 0)
@@ -645,23 +650,104 @@ local function exhausted(members)
   return (low and not canHeal and not hasPotion) or mp < maxMp * 0.1
 end
 
+-- 可通行格子上的最短路（BFS，8 方向；斜走要两侧都能走，不穿墙角）；回方向列表，走不到回 nil
+local function pathTo(floor, sx, sy, tx, ty)
+  local function key(x, y) return x * 10000 + y end
+  local function ok(x, y) return NLG.Walkable(0, floor, x, y) == 1 end
+  local from, queue, head = { [key(sx, sy)] = false }, { { sx, sy } }, 1
+  while queue[head] do
+    local x, y = queue[head][1], queue[head][2]
+    head = head + 1
+    if x == tx and y == ty then
+      local dirs, k = {}, key(x, y)
+      while from[k] do
+        table.insert(dirs, 1, from[k].dir)
+        k = from[k].prev
+      end
+      return dirs
+    end
+    for dir = 0, 7 do
+      local dx, dy = DIRS[dir][1], DIRS[dir][2]
+      local nx, ny = x + dx, y + dy
+      if from[key(nx, ny)] == nil and ok(nx, ny) and (dx == 0 or dy == 0 or (ok(x + dx, y) and ok(x, y + dy))) then
+        from[key(nx, ny)] = { prev = key(x, y), dir = dir }
+        table.insert(queue, { nx, ny })
+      end
+    end
+  end
+  return nil
+end
+
+local function healParty(members)
+  for _, m in ipairs(members) do
+    for _, u in ipairs({ m, Char.GetPet(m, 0), Char.GetPet(m, 1), Char.GetPet(m, 2), Char.GetPet(m, 3), Char.GetPet(m, 4) }) do
+      if u >= 0 then
+        Char.SetData(u, CONST.对象_血, Char.GetData(u, CONST.对象_最大血))
+        Char.SetData(u, CONST.对象_魔, Char.GetData(u, CONST.对象_最大魔))
+      end
+    end
+    NLG.UpChar(m)
+  end
+end
+
+-- 到护士前：面向护士，补满整队
+function Module:atNurse(c)
+  Char.SetData(c, CONST.对象_方向, NURSE.face)
+  NLG.UpChar(c)
+  local members = partyOf(c) or { c }
+  healParty(members)
+  self:logInfo('hospital', Char.GetData(c, CONST.对象_名字), #members)
+end
+
+-- 整队传到东医门口，再一格一格走到护士前补满血魔（队员不是队长时不处理，回 false）；也给管理页用。
+-- NLG.WalkMove 不会带队员走（实测），队员第 k 个照队长走过的路晚 k 格跟上，最后排在队长后面
+function Module:toHospital(c)
+  local members = partyOf(c)
+  if not members then return false end
+  if walking[c] then return true end
+  Char.Warp(c, 0, HOSPITAL.map, HOSPITAL.x, HOSPITAL.y) -- 传队长，队员会跟着
+  local dirs = pathTo(HOSPITAL.map, HOSPITAL.x, HOSPITAL.y, NURSE.x, NURSE.y)
+  if not dirs then
+    Char.Warp(c, 0, HOSPITAL.map, NURSE.x, NURSE.y)
+    dirs = {}
+  end
+  local i = 0
+  walking[c] = Cron.AddInterval(WALK_MS, function()
+    -- 途中被传走或下线就不补了
+    if Char.GetData(c, CONST.CHAR_地图) ~= HOSPITAL.map then
+      Cron.RemoveTask(walking[c])
+      walking[c] = nil
+      return
+    end
+    i = i + 1
+    local dir = dirs[i]
+    if dir then
+      local x, y = Char.GetData(c, CONST.CHAR_X), Char.GetData(c, CONST.CHAR_Y)
+      NLG.WalkMove(c, dir)
+      if Char.GetData(c, CONST.CHAR_X) == x + DIRS[dir][1] and Char.GetData(c, CONST.CHAR_Y) == y + DIRS[dir][2] then
+        for k = 2, #members do
+          local j = i - (k - 1)
+          if j >= 1 then NLG.WalkMove(members[k], dirs[j]) end
+        end
+        return
+      end
+      Char.Warp(c, 0, HOSPITAL.map, NURSE.x, NURSE.y) -- 被挡住就直接到护士前，免得卡住
+    end
+    Cron.RemoveTask(walking[c])
+    walking[c] = nil
+    self:atNurse(c)
+  end, 1)
+  return true
+end
+
 function Module:onLeaveBattle(c)
   if Char.GetData(c, CONST.对象_自动战斗开关) ~= 1 then return 0 end
   local members = partyOf(c)
   if not members or not exhausted(members) then return 0 end
   Cron.RunAt(os.time() + 1, function() -- 等引擎把战斗状态清完再传送
-    Char.Warp(c, 0, HOSPITAL.map, HOSPITAL.x, HOSPITAL.y) -- 传队长，队员会跟着
-    for _, m in ipairs(members) do
-      for _, u in ipairs({ m, Char.GetPet(m, 0), Char.GetPet(m, 1), Char.GetPet(m, 2), Char.GetPet(m, 3), Char.GetPet(m, 4) }) do
-        if u >= 0 then
-          Char.SetData(u, CONST.对象_血, Char.GetData(u, CONST.对象_最大血))
-          Char.SetData(u, CONST.对象_魔, Char.GetData(u, CONST.对象_最大魔))
-        end
-      end
-      NLG.UpChar(m)
+    if self:toHospital(c) then
+      NLG.SystemMessage(c, '[自動戰鬥] 補給用完，回東醫找護士補血魔')
     end
-    NLG.SystemMessage(c, '[自動戰鬥] 補給用完，已回東醫補滿血魔')
-    self:logInfo('hospital', Char.GetData(c, CONST.对象_名字), #members)
   end)
   return 0
 end
@@ -676,6 +762,7 @@ function Module:onLoad()
 end
 
 function Module:onUnload()
+  for _, task in pairs(walking) do Cron.RemoveTask(task) end
   self:logInfo('unload')
 end
 
