@@ -9,6 +9,12 @@
 !/tools/*.sh
 !/tools/*.py
 !/tools/*.reg
+!/tools/speed/
+/tools/speed/*
+!/tools/speed/*.c
+!/tools/speed/*.h
+!/tools/speed/*.def
+!/tools/speed/*.sh
 
 !/server-b/
 /server-b/*
