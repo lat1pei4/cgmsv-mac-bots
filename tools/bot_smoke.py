@@ -83,7 +83,7 @@ def main():
               '90 秒內沒結束：看 pktlog.py 該帳號 LYIm')
 
     act(leader, 'hospital')
-    arrived = wait(lambda s: pos(s[leader]) == NURSE, 60)  # 先在原地等走到東醫的腳程
+    arrived = wait(lambda s: pos(s[leader]) == NURSE, 180)  # 一路走到東醫（路上會遇敵）
     check('走到東醫護士前', arrived, str(pos(bots()[leader])))
     if arrived:
         s = bots()
@@ -101,7 +101,7 @@ def main():
 
     # 練等：在野外開練等 → 打完一場回東醫 → 補完自己傳回練功點
     act(leader, 'warp', floor=FIELD[0], x=FIELD[1], y=FIELD[2])
-    act(leader, 'grind', on=True)
+    act(leader, 'grind', on=True, floor=FIELD[0], x=FIELD[1], y=FIELD[2])  # 固定練功點：最近的是東醫
     check('練等自動遇敵', wait(lambda s: s[leader]['char']['battle'] and s[leader].get('activity') == 'grind', 90))  # 每步照遇敵率擲骰
     sent = False
     for _ in range(5):  # 練等每 3 秒就遇下一場，戰鬥中不能回東醫，抓空檔
@@ -109,8 +109,8 @@ def main():
         if act(leader, 'hospital')['ok']:
             sent = True
             break
-    check('練等中回東醫', sent and wait(lambda s: pos(s[leader]) == NURSE, 60))
-    check('補完自己回練功點', wait(lambda s: pos(s[leader])[0] == FIELD[0], 90), str(pos(bots()[leader])))  # 回程腳程（受傷時先繞去醫師）
+    check('練等中回東醫', sent and wait(lambda s: pos(s[leader]) == NURSE, 180))
+    check('補完自己回練功點', wait(lambda s: pos(s[leader])[0] == FIELD[0], 180), str(pos(bots()[leader])))  # 走回去（受傷時先繞去醫師）
     act(leader, 'grind', on=False)
     wait(lambda s: not s[leader]['char']['battle'], 90)
 

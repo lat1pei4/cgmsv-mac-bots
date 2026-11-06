@@ -634,15 +634,44 @@ function Module:setNoEscape(battleIndex, on)
   noEscape[battleIndex] = on or nil
 end
 
--- 回东医：开 /auto 的玩家（队长或单人）离开战斗后，若「有人血不到 30%（或 2 人以上不到一半）、没人会补血、也没有回血药」
--- 或「全队魔力剩不到 10%」，整队传送到法兰城东门医院（地图 1112，进门的位置），走到护士尤美儿（8,30）前面再补满血魔
-local HOSPITAL = { map = 1112, x = 12, y = 42 }
-local NURSE = { x = 8, y = 31, face = 0 } -- 站在护士正下方、面向北
+-- 回医院：开 /auto 的玩家（队长或单人）离开战斗后，若「有人血不到 30%（或 2 人以上不到一半）、没人会补血、也没有回血药」
+-- 或「全队魔力剩不到 10%」，整队走去补血地点（算脚程），进门后一格一格走到护士前补满血魔。
+-- 补血地点（data/npc.txt 的 Windowhealer／Injurydoctor；door＝从外面进门后站的格子，data/warp.txt）：
+-- 没人受伤就去最近的（村庄也算，使用者指定）；有人受伤（付得起）去有医师的，只有法兰城东医、西医有
+local HOSPITALS = {
+  { map = 1112, door = { 12, 42 }, nurse = { 8, 30 }, doctor = { 11, 18 } }, -- 法兰城东医（护士尤美儿、贝特里夫医师）
+  { map = 1111, door = { 12, 42 }, nurse = { 9, 30 }, doctor = { 10, 17 } }, -- 法兰城西医（护士克鲁梅、姆涅医师）
+  { map = 2010, door = { 14, 20 }, nurse = { 10, 13 } }, -- 芙蕾雅 (681,343) 进村
+  { map = 2110, door = { 2, 9 }, nurse = { 13, 5 } },    -- 芙蕾雅 (330,481) 进村
+  { map = 2310, door = { 1, 9 }, nurse = { 15, 6 } },    -- 芙蕾雅 (134,218) 进村
+  { map = 2410, door = { 2, 9 }, nurse = { 12, 5 } },    -- 芙蕾雅 (596,84) 进村
+}
+-- 算路线用到的地图：芙蕾雅、法兰城、上面的医院和各村，加上 botpanel 练功会去的洞穴（FIELD_FLOORS）
+-- （出入口从 data/warp.txt 读，两端都在这里的才算）
+local TRAVEL_FLOORS = { [100] = true, [1000] = true, [1111] = true, [1112] = true, [2000] = true, [2010] = true,
+  [2100] = true, [2110] = true, [2300] = true, [2310] = true, [2400] = true, [2410] = true,
+  [11000] = true, [11001] = true, [11002] = true, [11003] = true, [11004] = true, [11005] = true,
+  [15003] = true, [15004] = true, [15005] = true, [15592] = true, [15593] = true, [15594] = true,
+  -- 法兰城里堡→启程之间，各村传送点房间→村长家→村子（GATES 用）
+  [1500] = true, [1520] = true, [1522] = true, [2099] = true, [2012] = true, [2199] = true, [2198] = true,
+  [2112] = true, [2399] = true, [2312] = true, [2499] = true, [2412] = true }
+-- 村庄传送点（data/npc 的传送石事件 EV_mag_ab01/ab03、EV_ijk_6046/6068/6069）：
+-- 在村里的传送点房间第一次跟传送石说话就记 NowEvent 旗标（开传点）；之后在法兰城启程之间（1522）跟对应的
+-- 传送石说话，有旗标、单人、够等级（没职业时的门槛）就付钱传到那个村的传送点房间。
+-- bot 在村里的医院补血时顺便开这个村的传点（使用者指定：去过的村要开传点，以后才可传过去）
+local GATE_FLOOR, GATE_ENTRY = 1522, { 25, 24 } -- 启程之间、从里堡进来站的格子
+local GATES = {
+  { name = '伊尔村', flag = 94, hospital = 2010, stone = { 44, 32 }, to = { 2099, 20, 10 }, fee = 100, lv = 0 },
+  { name = '圣拉鲁卡村', flag = 95, hospital = 2310, stone = { 44, 43 }, to = { 2399, 15, 4 }, fee = 100, lv = 0 },
+  { name = '亚留特村', flag = 96, hospital = 2410, stone = { 44, 22 }, to = { 2499, 5, 15 }, fee = 250, lv = 10 },
+  { name = '维诺亚村', flag = 97, hospital = 2110, stone = { 8, 22 }, to = { 2199, 5, 5 }, fee = 250, lv = 15 },
+}
 local WALK_MS = 400
 -- NLG.WalkMove 的方向（实测）：0 北，顺时针到 7 西北
 local DIRS = { [0] = { 0, -1 }, { 1, -1 }, { 1, 0 }, { 1, 1 }, { 0, 1 }, { -1, 1 }, { -1, 0 }, { -1, -1 } }
 local walking = {} -- [队长] = 走路排程 id
-local pending = {} -- [队长] = true：战斗后等着回东医（还没开始传送）
+local walkKind = {} -- [队长] = 'hospital'（回医院）／'spot'（回练功点）等，走路的目的
+local pending = {} -- [队长] = true：战斗后等着回医院（还没开始走）
 
 local function partyOf(c)
   local leader = Char.GetPartyMember(c, 0)
@@ -692,13 +721,90 @@ local function pathTo(floor, sx, sy, tx, ty)
     for dir = 0, 7 do
       local dx, dy = DIRS[dir][1], DIRS[dir][2]
       local nx, ny = x + dx, y + dy
-      if from[key(nx, ny)] == nil and ok(nx, ny) and (dx == 0 or dy == 0 or (ok(x + dx, y) and ok(x, y + dy))) then
+      -- 出入口那格 NLG.Walkable 回不能走（实测），终点照样算到得了
+      if from[key(nx, ny)] == nil and (ok(nx, ny) or (nx == tx and ny == ty))
+          and (dx == 0 or dy == 0 or (ok(x + dx, y) and ok(x, y + dy))) then
         from[key(nx, ny)] = { prev = key(x, y), dir = dir }
         table.insert(queue, { nx, ny })
       end
     end
   end
   return nil
+end
+
+-- 地图连通区域：载入时把 TRAVEL_FLOORS 每张图做一次 flood fill，编号一样＝走得到（直线估计看不出被围起来的地方）
+local ffi = require('ffi')
+local regions = {} -- [地图] = { w, h, id = 每格的区域编号（ffi 阵列，0＝不能走） }
+local function buildRegions(floor)
+  local got, w, h = pcall(Map.GetMapSize, 0, floor) -- 文件标 [推测]，没有就不算（当成都走得到）
+  if not (got and w and h and w > 0 and h > 0) then return 0 end
+  local n = w * h
+  local walk, id = ffi.new('uint8_t[?]', n), ffi.new('int32_t[?]', n)
+  for y = 0, h - 1 do
+    for x = 0, w - 1 do
+      if NLG.Walkable(0, floor, x, y) == 1 then walk[y * w + x] = 1 end
+    end
+  end
+  local function ok(x, y) return x >= 0 and y >= 0 and x < w and y < h and walk[y * w + x] == 1 end
+  local count, queue = 0, {}
+  for k0 = 0, n - 1 do
+    if walk[k0] == 1 and id[k0] == 0 then
+      count = count + 1
+      id[k0] = count
+      local head, tail = 1, 1
+      queue[1] = k0
+      while head <= tail do
+        local k = queue[head]
+        head = head + 1
+        local x, y = k % w, math.floor(k / w)
+        for dir = 0, 7 do
+          local dx, dy = DIRS[dir][1], DIRS[dir][2]
+          local nx, ny = x + dx, y + dy
+          if ok(nx, ny) and id[ny * w + nx] == 0 and (dx == 0 or dy == 0 or (ok(x + dx, y) and ok(x, y + dy))) then
+            id[ny * w + nx] = count
+            tail = tail + 1
+            queue[tail] = ny * w + nx
+          end
+        end
+      end
+    end
+  end
+  regions[floor] = { w = w, h = h, id = id }
+  return count
+end
+
+---这一格的区域编号；不能走的格（出入口、NPC）看旁边能走的格；没算过的图回 nil
+local function regionAt(floor, x, y)
+  local r = regions[floor]
+  if not r then return nil end
+  for d = -1, 7 do
+    local px, py = x + (d >= 0 and DIRS[d][1] or 0), y + (d >= 0 and DIRS[d][2] or 0)
+    if px >= 0 and py >= 0 and px < r.w and py < r.h and r.id[py * r.w + px] > 0 then return r.id[py * r.w + px] end
+  end
+  return nil
+end
+
+---两格走不走得到（没算过的图当成走得到）
+local function connected(floor, x1, y1, x2, y2)
+  local a, b = regionAt(floor, x1, y1), regionAt(floor, x2, y2)
+  return not a or not b or a == b
+end
+
+-- 站在 NPC 旁边哪一格、面向 NPC：先试相邻（下、右、左、上、斜角），再试隔一格（隔着柜台）；
+-- 要从 from（进门的格子）走得到，免得站进柜台后面出不来
+local function standBy(map, npc, from)
+  for r = 1, 2 do
+    for _, o in ipairs({ { 0, r }, { r, 0 }, { -r, 0 }, { 0, -r }, { r, r }, { -r, r }, { r, -r }, { -r, -r } }) do
+      local x, y = npc[1] + o[1], npc[2] + o[2]
+      if NLG.Walkable(0, map, x, y) == 1 and (not from or connected(map, from[1], from[2], x, y)) then
+        local sx, sy = -o[1] / r, -o[2] / r
+        for d = 0, 7 do
+          if DIRS[d][1] == sx and DIRS[d][2] == sy then return { x, y, d } end
+        end
+      end
+    end
+  end
+  return { npc[1], npc[2] + 1, 0 }
 end
 
 local function healParty(members)
@@ -728,10 +834,14 @@ local function sellJunk(m)
   return gold
 end
 
--- 受伤找东医的贝特里夫医师（data/npc.txt Injurydoctor，站在 11,18）治：站他正下方、面向北
--- 费用是推测：NPC 参数「5|100」的 100 当一人一次的价钱；钱不够就不治
-local DOCTOR = { x = 11, y = 19, face = 0 }
+-- 受伤找医师（data/npc.txt Injurydoctor）治；费用是推测：NPC 参数「5|100」的 100 当一人一次的价钱；钱不够就不治
 local CURE_COST = 100
+local function needDoctor(members)
+  for _, m in ipairs(members) do
+    if Char.GetData(m, CONST.对象_受伤) > 0 and Char.GetData(m, CONST.对象_金币) >= CURE_COST then return true end -- 付不起就不白跑
+  end
+  return false
+end
 local function cureInjury(members)
   local n = 0
   for _, m in ipairs(members) do
@@ -745,123 +855,245 @@ local function cureInjury(members)
   return n
 end
 
--- 到护士前：面向护士，补满整队，卖背包杂物；有人受伤再走去医师那里治（使用者指定）
-function Module:atNurse(c)
-  Char.SetData(c, CONST.对象_方向, NURSE.face)
+-- 到护士前：面向护士，补满整队，卖背包杂物；有人受伤、这里有医师再走去医师那里治（使用者指定）
+function Module:atNurse(c, h)
+  local nurse = standBy(h.map, h.nurse, h.door)
+  Char.SetData(c, CONST.对象_方向, nurse[3])
   local members = partyOf(c) or { c }
   healParty(members)
-  local sold, injured = 0, false
-  for _, m in ipairs(members) do
-    sold = sold + sellJunk(m)
-    if Char.GetData(m, CONST.对象_受伤) > 0 and Char.GetData(m, CONST.对象_金币) >= CURE_COST then injured = true end -- 付不起就不白跑
-  end
+  local sold = 0
+  for _, m in ipairs(members) do sold = sold + sellJunk(m) end
   for _, m in ipairs(members) do NLG.UpChar(m) end
   local name = Char.GetData(c, CONST.对象_名字)
-  self:logInfo('hospital', name, #members, 'sold', sold)
-  if not injured then return end
-  local dirs = pathTo(HOSPITAL.map, NURSE.x, NURSE.y, DOCTOR.x, DOCTOR.y)
-  self:after(c, dirs and math.ceil(#dirs * WALK_MS / 1000) or 0, function()
-    if dirs then
-      Char.Warp(c, 0, HOSPITAL.map, DOCTOR.x, DOCTOR.y)
-      Char.SetData(c, CONST.对象_方向, DOCTOR.face)
-    end
-    self:logInfo('doctor', name, 'cured', cureInjury(members))
-  end)
-end
-
--- 地图之间的出入口（data/warp.txt）：LINKS[地图][相邻地图] = { 出口 x, y, 进去后 x, y }
-local LINKS = {
-  [100] = { [1000] = { 470, 196, 277, 88 } },                               -- 芙蕾雅 → 法兰城东门
-  [1000] = { [100] = { 281, 88, 475, 196 }, [1112] = { 221, 83, 12, 42 } }, -- 法兰城 → 芙蕾雅、东医
-  [1112] = { [1000] = { 12, 42, 221, 83 } },                                -- 东医 → 法兰城
-}
-local UNKNOWN_TRAVEL_SECS = 60 -- 路线不在 LINKS 里、或走不到时
-
----走过去要几秒（不真的走，算脚程）：地图之间照 LINKS 找路线，每张图内用 pathTo 算步数，每步 WALK_MS
-function Module:travelSecs(floor, x, y, toFloor, tx, ty)
-  local prev, queue, head = { [floor] = false }, { floor }, 1
-  while queue[head] and prev[toFloor] == nil do
-    local f = queue[head]
-    head = head + 1
-    for nf in pairs(LINKS[f] or {}) do
-      if prev[nf] == nil then
-        prev[nf] = f
-        table.insert(queue, nf)
+  self:logInfo('hospital', name, h.map, #members, 'sold', sold)
+  for _, g in ipairs(GATES) do
+    if g.hospital == h.map then
+      for _, m in ipairs(members) do
+        if Char.NowEvent(m, g.flag) ~= 1 then
+          Char.NowEvent(m, g.flag, 1)
+          self:logInfo('gate open', Char.GetData(m, CONST.对象_名字), g.name)
+        end
       end
     end
   end
-  if prev[toFloor] == nil then return UNKNOWN_TRAVEL_SECS end
-  local floors, f = {}, toFloor
-  while f do
-    table.insert(floors, 1, f)
-    f = prev[f]
-  end
-  local steps, cx, cy = 0, x, y
-  for i, fl in ipairs(floors) do
-    local link = LINKS[fl][floors[i + 1]] or { tx, ty }
-    local dirs = pathTo(fl, cx, cy, link[1], link[2])
-    if not dirs then return UNKNOWN_TRAVEL_SECS end
-    steps = steps + #dirs
-    cx, cy = link[3], link[4]
-  end
-  return math.ceil(steps * WALK_MS / 1000)
+  if not (h.doctor and needDoctor(members)) then return end
+  local doc = standBy(h.map, h.doctor, h.door)
+  self:travelTo(c, h.map, doc[1], doc[2], function()
+    Char.SetData(c, CONST.对象_方向, doc[3])
+    self:logInfo('doctor', name, 'cured', cureInjury(members))
+  end, 'hospital')
 end
 
----排程：原地等 secs 秒（算脚程）再执行 fn；等的期间 busy()。角色下线或换人就取消
-function Module:after(c, secs, fn)
+local WARPS = {} -- [地图] = { { x, y, 到哪张图, 进去后 x, y }, ... }
+local function loadWarps()
+  WARPS = {}
+  local f = io.open('data/warp.txt', 'r')
+  if not f then return end
+  for line in f:lines() do
+    local v = {}
+    for field in (line:gsub('\r', '') .. '\t'):gmatch('([^\t]*)\t') do table.insert(v, tonumber(field) or false) end
+    -- 栏位：编号, 从哪张图, x, y, 到哪张图, x, y
+    if v[2] and v[5] and TRAVEL_FLOORS[v[2]] and TRAVEL_FLOORS[v[5]] and v[2] ~= v[5] then
+      WARPS[v[2]] = WARPS[v[2]] or {}
+      table.insert(WARPS[v[2]], { v[3], v[4], v[5], v[6], v[7] })
+    end
+  end
+  f:close()
+  for _, g in ipairs(GATES) do g.stand = standBy(GATE_FLOOR, g.stone, GATE_ENTRY) end
+end
+
+---这一队能用的传送点：每个人都开过、够等级、付得起
+local function gatesFor(members)
+  local list = {}
+  for _, g in ipairs(GATES) do
+    local ok = true
+    for _, m in ipairs(members) do
+      if Char.NowEvent(m, g.flag) ~= 1 or Char.GetData(m, CONST.对象_等级) < g.lv or Char.GetData(m, CONST.对象_金币) < g.fee then
+        ok = false
+      end
+    end
+    if ok then table.insert(list, { g.stand[1], g.stand[2], g.to[1], g.to[2], g.to[3], gate = g }) end
+  end
+  return list
+end
+
+-- 图内走不到的段（出入口在被围起来的小区域，直线估计看不出来）：[地图:起点:终点] = true，route 不再用
+local blockedLegs = {}
+local function legKey(f, sx, sy, ex, ey) return f .. ':' .. sx .. ':' .. sy .. ':' .. ex .. ':' .. ey end
+
+---路线：出入口当节点，图内距离先用直线（8 方向走＝Chebyshev 距离）估，挑总距离最短的出入口顺序（Dijkstra）。
+---gates：这一队能用的传送点（gatesFor），在启程之间当成额外的出入口。
+---回 { { 地图, 起点 x, y, 终点 x, y, gate = 这段走完要用的传送点 or nil }, ... }（每张图内走一段）与估计步数；走不到回 nil
+local function route(floor, x, y, toFloor, tx, ty, gates)
+  local function cheb(x1, y1, x2, y2) return math.max(math.abs(x1 - x2), math.abs(y1 - y2)) end
+  local best, bestCost, seen = nil, math.huge, {}
+  local open = { { floor, x, y, 0, {} } }
+  while #open > 0 do
+    table.sort(open, function(a, b) return a[4] > b[4] end)
+    local s = table.remove(open)
+    if s[4] >= bestCost then break end
+    if s[1] == toFloor and connected(toFloor, s[2], s[3], tx, ty) and not blockedLegs[legKey(s[1], s[2], s[3], tx, ty)] then
+      local cost = s[4] + cheb(s[2], s[3], tx, ty)
+      if cost < bestCost then
+        best, bestCost = { unpack(s[5]) }, cost
+        table.insert(best, { toFloor, s[2], s[3], tx, ty })
+      end
+    end
+    local exits = WARPS[s[1]] or {}
+    if s[1] == GATE_FLOOR and gates then
+      exits = { unpack(exits) }
+      for _, g in ipairs(gates) do table.insert(exits, g) end
+    end
+    for _, w in ipairs(exits) do
+      local k, cost = w[3] * 100000000 + w[4] * 10000 + w[5], s[4] + cheb(s[2], s[3], w[1], w[2])
+      if (not seen[k] or cost < seen[k]) and connected(s[1], s[2], s[3], w[1], w[2])
+          and not blockedLegs[legKey(s[1], s[2], s[3], w[1], w[2])] then
+        seen[k] = cost
+        local legs = { unpack(s[5]) }
+        table.insert(legs, { s[1], s[2], s[3], w[1], w[2], gate = w.gate })
+        table.insert(open, { w[3], w[4], w[5], cost, legs })
+      end
+    end
+  end
+  return best, bestCost
+end
+
+local function stopWalk(c)
+  if walking[c] then Cron.RemoveTask(walking[c]) end
+  walking[c], walkKind[c] = nil, nil
+end
+
+---整队（c 是队长或单人）真的走去 (toFloor, tx, ty)，到了呼叫 fn()；回估计秒数（给 log）。使用者指定：路上要遇敌。
+---照 route 一段一段 NLG.WalkMove；这段走完（到出入口）就传到下一段的起点（下一张图的进入点，队员会跟着传）。
+---传送点那段先扣每人的传送费（传送石要单人才肯传，这里不真的离队，只照规则检查、扣钱）。
+---NLG.WalkMove 不会触发遇敌（实测），每走一步照那一格的遇敌率（botpanel:encountRate）掷骰；战斗中暂停，打完接着走。
+---NLG.WalkMove 不会带队员走（实测），队员第 k 个照队长走过的路晚 k 格跟上。被挡住 3 次就直接传到这段的终点；
+---完全排不出路线就直接传到目的地
+function Module:travelTo(c, toFloor, tx, ty, fn, kind)
+  stopWalk(c)
+  local members = partyOf(c) or { c }
   local name = Char.GetData(c, CONST.对象_名字)
-  walking[c] = Cron.RunAt(os.time() + secs, function()
-    walking[c] = nil
-    if Char.IsValidCharIndex(c) and Char.GetData(c, CONST.对象_名字) == name then fn() end
-  end)
-end
-
--- 整队回东医：先在原地等走到东医门口的时间，再传进门、一格一格走到护士前补满血魔（队员不是队长时不处理，回 false）；也给管理页用。
--- NLG.WalkMove 不会带队员走（实测），队员第 k 个照队长走过的路晚 k 格跟上，最后排在队长后面
-function Module:toHospital(c)
-  local members = partyOf(c)
-  if not members or Battle.GetCurrentBattle(c) >= 0 then return false end
-  if walking[c] then return true end
-  local secs = self:travelSecs(Char.GetData(c, CONST.CHAR_地图), Char.GetData(c, CONST.CHAR_X), Char.GetData(c, CONST.CHAR_Y),
-    HOSPITAL.map, HOSPITAL.x, HOSPITAL.y)
-  self:logInfo('to hospital', Char.GetData(c, CONST.对象_名字), secs)
-  self:after(c, secs, function() self:walkToNurse(c, members) end)
-  return true
-end
-
-function Module:walkToNurse(c, members)
-  Char.Warp(c, 0, HOSPITAL.map, HOSPITAL.x, HOSPITAL.y) -- 传队长，队员会跟着
-  local dirs = pathTo(HOSPITAL.map, HOSPITAL.x, HOSPITAL.y, NURSE.x, NURSE.y)
-  if not dirs then
-    Char.Warp(c, 0, HOSPITAL.map, NURSE.x, NURSE.y)
-    dirs = {}
+  -- 每段先用 pathTo 找实际的路；走不到的段记进 blockedLegs 再重排路线
+  local legs, plan
+  for _ = 1, 8 do
+    legs = route(Char.GetData(c, CONST.CHAR_地图), Char.GetData(c, CONST.CHAR_X), Char.GetData(c, CONST.CHAR_Y),
+      toFloor, tx, ty, gatesFor(members))
+    if not legs then break end
+    plan = {}
+    for k, l in ipairs(legs) do
+      local dirs = pathTo(l[1], l[2], l[3], l[4], l[5])
+      for d = 0, 7 do -- 同一个门有好几格出入口时，这格可能只从隔壁的出入口格进得去：走到它旁边就好（这段走完会传过去）
+        if dirs then break end
+        dirs = pathTo(l[1], l[2], l[3], l[4] + DIRS[d][1], l[5] + DIRS[d][2])
+      end
+      if not dirs then
+        blockedLegs[legKey(l[1], l[2], l[3], l[4], l[5])] = true
+        self:logInfo('no path', l[1], l[2], l[3], l[4], l[5])
+        plan = nil
+        break
+      end
+      plan[k] = dirs
+    end
+    if plan then break end
   end
-  local i = 0
+  if not plan then
+    self:logInfo('no route', name, Char.GetData(c, CONST.CHAR_地图), Char.GetData(c, CONST.CHAR_X), Char.GetData(c, CONST.CHAR_Y), toFloor,
+      'region', regionAt(Char.GetData(c, CONST.CHAR_地图), Char.GetData(c, CONST.CHAR_X), Char.GetData(c, CONST.CHAR_Y)))
+    legs, plan = { { toFloor, tx, ty, tx, ty } }, { {} } -- 直接传过去
+  end
+  local steps = 0
+  for _, dirs in ipairs(plan) do steps = steps + #dirs end
+  for _, l in ipairs(legs) do
+    if l.gate then
+      for _, m in ipairs(members) do Char.AddGold(m, -l.gate.fee) end
+      self:logInfo('gate', name, l.gate.name, 'fee', l.gate.fee)
+    end
+  end
+  local li, dirs, i, blocked = 0, {}, 0, 0
+  local function startLeg() -- 走下一段：不在这段起点就传过去；回 false＝全部走完
+    li = li + 1
+    local l = legs[li]
+    if not l then return false end
+    if Char.GetData(c, CONST.CHAR_地图) ~= l[1] or Char.GetData(c, CONST.CHAR_X) ~= l[2] or Char.GetData(c, CONST.CHAR_Y) ~= l[3] then
+      Char.Warp(c, 0, l[1], l[2], l[3])
+    end
+    dirs, i, blocked = plan[li], 0, 0
+    return true
+  end
+  startLeg()
+  walkKind[c] = kind
+  local panel = getModule('botpanel')
   walking[c] = Cron.AddInterval(WALK_MS, function()
-    -- 途中被传走或下线就不补了
-    if Char.GetData(c, CONST.CHAR_地图) ~= HOSPITAL.map then
-      Cron.RemoveTask(walking[c])
-      walking[c] = nil
-      return
+    if not (Char.IsValidCharIndex(c) and Char.GetData(c, CONST.对象_名字) == name) then return stopWalk(c) end
+    if Battle.GetCurrentBattle(c) >= 0 then return end -- 战斗中暂停
+    local l, f = legs[li], Char.GetData(c, CONST.CHAR_地图)
+    if f ~= l[1] then
+      if not (legs[li + 1] and legs[li + 1][1] == f) then -- 被传走（管理页、GM）就不走了
+        self:logInfo('walk stop', name, f)
+        return stopWalk(c)
+      end
+      i = #dirs -- 踩到出入口引擎自己传过去了：这段算走完
     end
     i = i + 1
     local dir = dirs[i]
     if dir then
       local x, y = Char.GetData(c, CONST.CHAR_X), Char.GetData(c, CONST.CHAR_Y)
       NLG.WalkMove(c, dir)
-      if Char.GetData(c, CONST.CHAR_X) == x + DIRS[dir][1] and Char.GetData(c, CONST.CHAR_Y) == y + DIRS[dir][2] then
+      local nx, ny = Char.GetData(c, CONST.CHAR_X), Char.GetData(c, CONST.CHAR_Y)
+      if nx == x + DIRS[dir][1] and ny == y + DIRS[dir][2] then
+        blocked = 0
         for k = 2, #members do
           local j = i - (k - 1)
           if j >= 1 then NLG.WalkMove(members[k], dirs[j]) end
         end
-        return
+        if panel and Char.GetData(c, CONST.CHAR_地图) == l[1] and math.random(100) <= panel:encountRate(l[1], nx, ny) then
+          Battle.Encount(c, c)
+        end
+      else
+        i, blocked = i - 1, blocked + 1
+        if blocked >= 3 then
+          Char.Warp(c, 0, l[1], l[4], l[5]) -- 被挡住就直接到这段终点，免得卡住
+          i = #dirs
+        end
       end
-      Char.Warp(c, 0, HOSPITAL.map, NURSE.x, NURSE.y) -- 被挡住就直接到护士前，免得卡住
+      return
     end
-    Cron.RemoveTask(walking[c])
-    walking[c] = nil
-    self:atNurse(c)
+    if startLeg() then return end
+    stopWalk(c)
+    fn()
   end, 1)
+  return math.ceil(steps * WALK_MS / 1000)
+end
+
+---估计走过去的步数（route 的直线估计，给 botpanel 挑练功点用）；走不到回 nil
+function Module:distance(floor, x, y, toFloor, tx, ty)
+  local legs, cost = route(floor, x, y, toFloor, tx, ty)
+  return legs and cost or nil
+end
+
+---挑补血地点：有人受伤（付得起）只看有医师的；其余挑路线估计最短的
+local function pickHospital(c, members)
+  local doctor, f, x, y = needDoctor(members), Char.GetData(c, CONST.CHAR_地图), Char.GetData(c, CONST.CHAR_X), Char.GetData(c, CONST.CHAR_Y)
+  local best, bestCost = HOSPITALS[1], math.huge
+  for _, h in ipairs(HOSPITALS) do
+    if h.doctor or not doctor then
+      local _, cost = route(f, x, y, h.map, h.door[1], h.door[2], gatesFor(members))
+      if cost < bestCost then best, bestCost = h, cost end
+    end
+  end
+  return best
+end
+
+-- 整队回医院：先挑补血地点（pickHospital），一路走到护士前补满血魔（路上会遇敌）；正在回练功点的路上就改去医院。
+-- 队员不是队长时不处理，回 false；也给管理页用。
+function Module:toHospital(c)
+  local members = partyOf(c)
+  if not members or Battle.GetCurrentBattle(c) >= 0 then return false end
+  if walkKind[c] == 'hospital' then return true end
+  local h = pickHospital(c, members)
+  local nurse = standBy(h.map, h.nurse, h.door)
+  local secs = self:travelTo(c, h.map, nurse[1], nurse[2], function() self:atNurse(c, h) end, 'hospital')
+  self:logInfo('to hospital', Char.GetData(c, CONST.对象_名字), h.map, secs)
   return true
 end
 
@@ -873,18 +1105,28 @@ function Module:onLeaveBattle(c)
   Cron.RunAt(os.time() + 1, function() -- 等引擎把战斗状态清完再传送
     pending[c] = nil
     if self:toHospital(c) then
-      NLG.SystemMessage(c, '[自動戰鬥] 補給用完，回東醫找護士補血魔')
+      NLG.SystemMessage(c, '[自動戰鬥] 補給用完，回醫院找護士補血魔')
     end
   end)
   return 0
 end
 
----回东医途中（等传送或走路中）；管理页的练等这段时间不遇敌
+---回医院或走路途中；管理页的练等这段时间不自己遇敌（走路会遇）
 function Module:busy(c)
   return pending[c] ~= nil or walking[c] ~= nil
 end
 
+---正在走路（不含战斗后等着出发）
+function Module:isWalking(c)
+  return walking[c] ~= nil
+end
+
 function Module:onLoad()
+  local t0 = os.clock()
+  for f in pairs(TRAVEL_FLOORS) do buildRegions(f) end
+  local r = regions[100]
+  self:logInfo('regions', 'secs', os.clock() - t0, 'field', r and r.w, r and r.h)
+  loadWarps()
   self:logInfo('load')
   self:regCallback('BeforeBattleTurnEvent', Func.bind(self.onTurn, self))
   self:regCallback('BattleOverEvent', Func.bind(self.onBattleOver, self))

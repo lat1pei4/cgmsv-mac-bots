@@ -69,21 +69,31 @@ local function zoneAt(floor, x, y)
   return best
 end
 
----这一格每步的遇敌率（%）：在区域的下限～上限之间取；没有区域回 0
+---这一格每步的遇敌率（%）：在区域的下限～上限之间取；没有区域回 0（autobattle 走路时也用）
 local function encountRate(floor, x, y)
   local z = zoneAt(floor, x, y)
   return z and math.random(z.min, z.max) or 0
 end
 
----自动选练功点。把这张图的区域依「怪物最高等级」分级（同一个最高等级＝同一级）：
+-- 芙蕾雅的练功范围：野外加上从芙蕾雅走得进去的洞（维诺亚洞穴、哈巴鲁东边洞穴、两个海底洞窟；使用者指定）。
+-- 穿过海底洞窟到索奇亚是另一块大陆，不算。autobattle 的 TRAVEL_FLOORS 也要有这些图才算得出路线
+local FIELD_OF = {}
+for _, f in ipairs({ 100, 11000, 11001, 11002, 11003, 11004, 11005, 15003, 15004, 15005, 15592, 15593, 15594 }) do
+  FIELD_OF[f] = true
+end
+local function sameField(a, b) return a == b or (FIELD_OF[a] and FIELD_OF[b]) or false end
+-- 练功点那一格要从法兰城东门外（芙蕾雅那一侧）走得到：有些区域里有被围起来、走不进去的小块
+local ANCHOR = { 100, 475, 196 }
+
+---自动选练功点。把这张图（芙蕾雅含洞）的区域依「怪物最高等级」分级（同一个最高等级＝同一级）：
 ---基准级＝最高等级 ≤ 队伍等级 + LEVEL_MARGIN 里最强的一级，实际去基准级 + adj；
 ---ceil＝{最高等级, 队伍等级}：这一级打输过，队伍还是那个等级时不再去（升级后才再试）。
----同一级挑离 (nx, ny) 近的区域，从区域中心往外找一格能走、而且确实属于这个区域的格子。
+---同一级挑离 (nx, ny) 近的区域（跨图照出入口估路程），从区域中心往外找一格能走、而且确实属于这个区域的格子。
 ---回 { floor, x, y, true（自动）, 实际 adj, ceil 最高等级 or false, ceil 队伍等级 or false }，找不到回 nil
 local function pickSpot(floor, partyLv, nx, ny, adj, ceil)
   local his, seen = {}, {}
   for _, z in ipairs(zones) do
-    if z.floor == floor and z.hi and not seen[z.hi] then
+    if sameField(floor, z.floor) and z.hi and not seen[z.hi] then
       seen[z.hi] = true
       table.insert(his, z.hi)
     end
@@ -98,11 +108,12 @@ local function pickSpot(floor, partyLv, nx, ny, adj, ceil)
   else
     ceil = nil
   end
-  local cands = {}
+  local cands, hospital = {}, getModule('autobattle')
   for _, z in ipairs(zones) do
-    if z.floor == floor and z.hi == his[i] then
+    if sameField(floor, z.floor) and z.hi == his[i] then
       local cx, cy = math.floor((z.x1 + z.x2) / 2), math.floor((z.y1 + z.y2) / 2)
-      table.insert(cands, { z = z, cx = cx, cy = cy, d = math.max(math.abs(cx - nx), math.abs(cy - ny)) })
+      local d = hospital:distance(floor, nx, ny, z.floor, cx, cy) or math.huge
+      table.insert(cands, { z = z, cx = cx, cy = cy, d = d })
     end
   end
   table.sort(cands, function(a, b) return a.d < b.d end)
@@ -111,8 +122,9 @@ local function pickSpot(floor, partyLv, nx, ny, adj, ceil)
       for dx = -r, r do
         for dy = -r, r do
           local x, y = c.cx + dx, c.cy + dy
-          if math.max(math.abs(dx), math.abs(dy)) == r and NLG.Walkable(0, floor, x, y) == 1 and zoneAt(floor, x, y) == c.z then
-            return { floor, x, y, true, i - base, ceil and ceil[1] or false, ceil and ceil[2] or false }
+          if math.max(math.abs(dx), math.abs(dy)) == r and NLG.Walkable(0, c.z.floor, x, y) == 1 and zoneAt(c.z.floor, x, y) == c.z
+              and hospital:distance(ANCHOR[1], ANCHOR[2], ANCHOR[3], c.z.floor, x, y) then
+            return { c.z.floor, x, y, true, i - base, ceil and ceil[1] or false, ceil and ceil[2] or false }
           end
         end
       end
@@ -453,6 +465,10 @@ local ACTIONS = {
 local NEED_ONLINE = { auto = true, hospital = true, encount = true, grind = true, warp = true, join = true, leave = true, outfit = true,
   autopoints = true, addpoint = true, petstate = true, unequip = true, equip = true, discard = true }
 
+function Module:encountRate(floor, x, y)
+  return encountRate(floor, x, y)
+end
+
 function Module:act(req)
   local a, fn = req.account, ACTIONS[req.action or '']
   if not validAccount(a) or not fn then return { ok = false, msg = 'bad_param' } end
@@ -533,7 +549,7 @@ end
 
 -- 练等（每步跑一次）：练等中的角色（队长或单人）不在战斗、不在回东医途中时——
 -- 在练功点附近：整队来回走，每步照这格的遇敌率掷骰，中了才遇敌；战斗结束先停 AFTER_BATTLE_MS。
--- 不在练功点（补完血、重新登入、换练功点）：原地等走回去的时间（autobattle:travelSecs）再传过去
+-- 不在练功点（补完血、重新登入、换练功点）：整队走回去（autobattle:travelTo，路上会遇敌、会用开过的村庄传送点）
 local roam = {} -- [charIndex] = { dir = 下一步方向, rest = 还要停几步, battles/ko = 这一趟的战绩, easy = 连续轻松几趟 }
 
 ---一趟结束（开始回东医）：照这趟的战绩调 adj，换了级就改练功点（补完血直接走去新点）
@@ -563,7 +579,7 @@ function Module:judgeTrip(c, st, spot, account)
   if new then
     setSpot(c, new)
     local z = zoneAt(new[1], new[2], new[3])
-    self:logInfo('auto spot', account, verdict, new[2], new[3], z.id, 'hi', z.hi, 'adj', new[5])
+    self:logInfo('auto spot', account, verdict, new[1], new[2], new[3], z.id, 'hi', z.hi, 'adj', new[5])
   end
 end
 function Module:grind()
@@ -588,10 +604,10 @@ function Module:grind()
       if lv and lv ~= st.lv then -- 自动选点：队伍等级变了就重选（不同点就换过去，也是算脚程）
         st.lv = lv
         local new = pickSpot(spot[1], lv, spot[2], spot[3], spot[5], spot[6] and { spot[6], spot[7] } or nil)
-        if new and (new[2] ~= spot[2] or new[3] ~= spot[3]) then
+        if new and (new[1] ~= spot[1] or new[2] ~= spot[2] or new[3] ~= spot[3]) then
           setSpot(c, new)
           spot = new
-          self:logInfo('auto spot', r.account, lv, new[2], new[3], zoneAt(new[1], new[2], new[3]).id)
+          self:logInfo('auto spot', r.account, lv, new[1], new[2], new[3], zoneAt(new[1], new[2], new[3]).id)
         end
       end
       -- 战绩：一场打完记一场；打完有人血剩 1 以下（倒下）记 ko
@@ -599,10 +615,13 @@ function Module:grind()
       if inBattle then
         st.fighting = true
       elseif st.fighting then
-        st.fighting, st.battles = false, (st.battles or 0) + 1
-        for i = 0, 4 do
-          local m = Char.GetPartyMember(c, i)
-          if (m >= 0 or i == 0) and Char.GetData(m >= 0 and m or c, CONST.对象_血) <= 1 then st.ko = true end
+        st.fighting = false
+        if not hospital:isWalking(c) then -- 走路途中遇到的不算这一趟练功的战绩
+          st.battles = (st.battles or 0) + 1
+          for i = 0, 4 do
+            local m = Char.GetPartyMember(c, i)
+            if (m >= 0 or i == 0) and Char.GetData(m >= 0 and m or c, CONST.对象_血) <= 1 then st.ko = true end
+          end
         end
       end
       if spot[4] and hospital:busy(c) and ((st.battles or 0) > 0 or st.ko) then
@@ -613,9 +632,8 @@ function Module:grind()
       elseif not hospital:busy(c) then
         local p = here(c)
         if p[1] ~= spot[1] or math.max(math.abs(p[2] - spot[2]), math.abs(p[3] - spot[3])) > ROAM then
-          local secs = hospital:travelSecs(p[1], p[2], p[3], spot[1], spot[2], spot[3])
+          local secs = hospital:travelTo(c, spot[1], spot[2], spot[3], function() end, 'spot')
           self:logInfo('to spot', r.account, secs)
-          hospital:after(c, secs, function() Char.Warp(c, 0, spot[1], spot[2], spot[3]) end) -- 传队长，队员会跟着
         elseif st.rest > 0 then
           st.rest = st.rest - 1
         else
